@@ -8,3 +8,9 @@ check-fmt:
 
 test:
 	cargo test --all -- --test-threads=1
+	cargo test -p cyclonedds-rs -F cli -- --test-threads=1
+
+deb-cdds-cli:
+	mkdir -p deb
+	cargo deb --manifest-path cyclonedds/Cargo.toml -p cyclonedds-rs
+	cp -f target/debian/cdds-cli_*.deb deb/
