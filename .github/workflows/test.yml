@@ -8,12 +8,8 @@ jobs:
     strategy:
       matrix:
         include:
-          # - os: ubuntu-22.04
-          #   arch: amd64
           - os: ubuntu-24.04
             arch: amd64
-          # - os: ubuntu-22.04-arm
-          #   arch: arm64
           - os: ubuntu-24.04-arm
             arch: arm64
     runs-on: ${{ matrix.os }}
@@ -21,20 +17,33 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: true
+      - name: Verify vendored Cyclone DDS
+        env:
+          CYCLONEDDS_VERSION: 0.10.5
+        run: |
+          expected_sha=$(git ls-tree "$GITHUB_SHA" vendor/cyclonedds | awk '{print $3}')
+          actual_sha=$(git -C vendor/cyclonedds rev-parse HEAD)
+          test "$actual_sha" = "$expected_sha"
+          grep -F "project(CycloneDDS VERSION $CYCLONEDDS_VERSION" vendor/cyclonedds/CMakeLists.txt
+      - id: rust-version
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+
+          with open("Cargo.toml", "rb") as cargo_toml:
+              print(f"toolchain={tomllib.load(cargo_toml)['workspace']['package']['rust-version']}")
+          PY
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-version.outputs.toolchain }}
           components: rustfmt, clippy
-      # キャッシュの復元
       - name: Cache debian packages
         id: cache-deb
         uses: actions/cache@v4
         with:
           path: ./deb/*.deb
-          # OSバージョン、アーキテクチャ、ビルドスクリプトのハッシュをキーにする
-          key: deb-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('vendor/Makefile', 'vendor/debian/Makefile', 'vendor/debian/Cargo-template.toml') }}
+          key: deb-v2-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('common.mk', 'vendor/Makefile', 'vendor/debian/**', 'vendor/config/**', 'vendor/cyclonedds/**', 'vendor/iceoryx/**') }}
 
-      # キャッシュがなければビルドを実行
       - uses: taiki-e/install-action@v2
         if: steps.cache-deb.outputs.cache-hit != 'true'
         with:
@@ -42,11 +51,9 @@ jobs:
       - name: Build deb package
         if: steps.cache-deb.outputs.cache-hit != 'true'
         run: |
-          # Setup and build
           make -C vendor/ setup
           make -C vendor/debian deb
 
-      # 常にインストールを実行
       - name: Install dependencies
         run: sudo dpkg -i ./deb/*.deb
 

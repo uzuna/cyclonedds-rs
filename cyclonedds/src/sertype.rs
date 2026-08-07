@@ -7,17 +7,17 @@ use std::{ffi::CStr, marker::PhantomData};
 
 use cdr::Infinite;
 use cyclonedds_sys::{
-    dds_free_op_t, ddsi_serdata_ops, ddsi_sertype, ddsi_sertype_fini, ddsi_sertype_init,
-    ddsi_sertype_ops, ddsi_sertype_v0, DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT,
+    DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT, dds_free_op_t, ddsi_serdata_ops, ddsi_sertype,
+    ddsi_sertype_fini, ddsi_sertype_init, ddsi_sertype_ops, ddsi_sertype_v0,
 };
 use murmur3::murmur3_32;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use tracing::{trace, warn};
 
 use crate::{
+    Sample, TopicType,
     serdata::{create_serdata_ops_base, create_serdata_ops_serdes},
     util::SGReader,
-    Sample, TopicType,
 };
 
 /// CycloneDDSで特定の型を扱うための情報を保持する構造体
@@ -306,7 +306,8 @@ unsafe extern "C" fn sertype_hash<T>(tp: *const ddsi_sertype) -> u32 {
     let sertype = SerType::<T>::const_ref_from_sertype(tp);
     trace!(type_name = sertype.type_name());
     // 型名と型サイズでハッシュ値を計算する
-    let type_name = CStr::from_ptr(sertype.sertype.type_name);
+    // SAFETY: type_name は sertype の生存中保持される NUL 終端文字列である。
+    let type_name = unsafe { CStr::from_ptr(sertype.sertype.type_name) };
     let type_name_bytes = type_name.to_bytes();
     let type_size = core::mem::size_of::<T>().to_ne_bytes();
     let sg_list = [type_name_bytes, &type_size];
@@ -396,14 +397,14 @@ pub mod tests {
     use std::{ffi::c_void, marker::PhantomData, sync::Arc};
 
     use cyclonedds_sys::{
-        dds_create_writer, dds_return_loan, dds_write, ddsi_sertype, iceoryx_header,
-        iceoryx_header_from_chunk, DDSError, DdsEntity, DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT,
-        IOX_CHUNK_CONTAINS_SERIALIZED_DATA,
+        DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT, DDSError, DdsEntity,
+        IOX_CHUNK_CONTAINS_SERIALIZED_DATA, dds_create_writer, dds_return_loan, dds_write,
+        ddsi_sertype, iceoryx_header, iceoryx_header_from_chunk,
     };
 
     use crate::{
-        common::tests::TestTypeAlloc, sertype::SerType, DdsParticipant, DdsPublisher, DdsTopic,
-        DdsWritable, Entity, Sample, TopicType,
+        DdsParticipant, DdsPublisher, DdsTopic, DdsWritable, Entity, Sample, TopicType,
+        common::tests::TestTypeAlloc, sertype::SerType,
     };
 
     // IoxChunkテストのためのWriter
@@ -606,8 +607,8 @@ pub mod tests {
     #[test_log::test]
     #[ignore = "requires iox-roudi to be running"]
     fn test_sertype_ops_serialize() -> anyhow::Result<()> {
-        crate::common::tests::setup_shm_config();
-        let p = DdsParticipant::create(None, None, None)?;
+        let _domain = crate::common::tests::create_shm_domain(3)?;
+        let p = DdsParticipant::create(Some(3), None, None)?;
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serops_iox", None, None)?;
         let mut w = Writer::create(&pubb, topic)?;

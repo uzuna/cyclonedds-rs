@@ -15,8 +15,8 @@
 */
 
 use crate::{
-    dds_listener::DdsListener, dds_participant::DdsParticipant, dds_qos::DdsQos, sertype::SerType,
-    Entity,
+    Entity, dds_listener::DdsListener, dds_participant::DdsParticipant, dds_qos::DdsQos,
+    sertype::SerType,
 };
 
 use std::convert::From;
@@ -24,7 +24,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 
 use crate::serdes::TopicType;
-pub use cyclonedds_sys::{ddsi_sertype, DDSError, DdsEntity};
+pub use cyclonedds_sys::{DDSError, DdsEntity, ddsi_sertype};
 
 pub struct TopicBuilder<T: TopicType> {
     maybe_qos: Option<DdsQos>,
@@ -195,6 +195,7 @@ impl<T> Clone for DdsTopic<T> {
 mod test {
     use super::*;
     use crate::SampleBuffer;
+    use crate::common::tests::create_loopback_domain;
     use crate::{DdsPublisher, DdsWriter};
     use cyclonedds_derive::Topic;
     use serde::{Deserialize, Serialize};
@@ -220,7 +221,8 @@ mod test {
             String::from("prefix/dds_topic/test/test_topic_creation/MyTopic")
         );
 
-        let participant = DdsParticipant::create(None, None, None).unwrap();
+        let _domain = create_loopback_domain(20).unwrap();
+        let participant = DdsParticipant::create(Some(20), None, None).unwrap();
         let topic = MyTopic::create_topic(&participant, None, None, None).unwrap();
         let publisher =
             DdsPublisher::create(&participant, None, None).expect("Unable to create publisher");

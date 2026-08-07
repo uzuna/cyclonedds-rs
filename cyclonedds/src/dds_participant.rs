@@ -14,7 +14,7 @@
     limitations under the License.
 */
 
-use crate::{dds_listener::DdsListener, dds_qos::DdsQos, DdsReadable, DdsWritable, Entity};
+use crate::{DdsReadable, DdsWritable, Entity, dds_listener::DdsListener, dds_qos::DdsQos};
 pub use cyclonedds_sys::{DDSError, DdsDomainId, DdsEntity};
 use std::convert::From;
 use tracing::trace;

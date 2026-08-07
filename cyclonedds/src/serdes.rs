@@ -17,7 +17,7 @@
 // Rust deserializer for CycloneDDS.
 // See discussion at https://github.com/eclipse-cyclonedds/cyclonedds/issues/830
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use std::ptr::NonNull;
 
@@ -338,7 +338,7 @@ impl<'a, T> SampleBuffer<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{sertype::SerType, DdsListener, DdsParticipant, DdsQos, DdsTopic};
+    use crate::{DdsListener, DdsParticipant, DdsQos, DdsTopic, sertype::SerType};
     use cyclonedds_derive::Topic;
     use serde::{Deserialize, Serialize};
     use std::ffi::CString;
@@ -435,7 +435,9 @@ mod test {
         let key_cdr = foo.key_cdr();
         assert_eq!(
             key_cdr,
-            vec![0, 0, 0, 0, 18, 52, 86, 120, 0, 0, 0, 4, 98, 111, 111, 0, 0, 0, 0, 25]
+            vec![
+                0, 0, 0, 0, 18, 52, 86, 120, 0, 0, 0, 4, 98, 111, 111, 0, 0, 0, 0, 25
+            ]
         );
     }
 
@@ -483,7 +485,9 @@ mod test {
         let key_cdr = foo.key_cdr();
         assert_eq!(
             key_cdr,
-            vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 102, 111, 111, 0]
+            vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 102, 111, 111, 0
+            ]
         );
         assert_eq!(true, Foo::force_md5_keyhash());
     }

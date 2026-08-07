@@ -14,5 +14,5 @@
     limitations under the License.
 */
 
-pub use cyclonedds_sys::dds_alloc;
 pub use cyclonedds_sys::DDS_FREE_ALL;
+pub use cyclonedds_sys::dds_alloc;

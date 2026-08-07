@@ -12,15 +12,16 @@ use std::{ffi::c_void, ptr::NonNull};
 
 use cdr::{Bounded, CdrBe, Infinite};
 use cyclonedds_sys::{
-    ddsi_keyhash, ddsi_serdata, ddsi_serdata_addref, ddsi_serdata_init, ddsi_serdata_kind,
-    ddsi_serdata_ops, ddsi_serdata_removeref, ddsi_sertype, ddsrt_md5_append, ddsrt_md5_finish,
-    ddsrt_md5_init, ddsrt_md5_state_t, free_iox_chunk, iceoryx_header_from_chunk, iovec, iox_sub_t,
-    nn_rdata, nn_rmsg, IOX_CHUNK_CONTAINS_RAW_DATA, SDK_DATA, SDK_KEY,
+    IOX_CHUNK_CONTAINS_RAW_DATA, SDK_DATA, SDK_KEY, ddsi_keyhash, ddsi_serdata,
+    ddsi_serdata_addref, ddsi_serdata_init, ddsi_serdata_kind, ddsi_serdata_ops,
+    ddsi_serdata_removeref, ddsi_sertype, ddsrt_md5_append, ddsrt_md5_finish, ddsrt_md5_init,
+    ddsrt_md5_state_t, free_iox_chunk, iceoryx_header_from_chunk, iovec, iox_sub_t, nn_rdata,
+    nn_rmsg,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use tracing::{error, trace, warn};
 
-use crate::{sertype::SerType, util::SGReader, Sample, TopicType};
+use crate::{Sample, TopicType, sertype::SerType, util::SGReader};
 
 /// キー値のハッシュを保持する列挙型
 /// 仕様はDDSIエンコーディング仕様書に従う
@@ -274,7 +275,8 @@ unsafe extern "C" fn forward_serdata_to_ser_ref<T>(
     iov: *mut iovec,
 ) -> *mut ddsi_serdata {
     let serdata = SerData::<T>::mut_ref_from_serdata(serdata);
-    let iov = &mut *iov;
+    // SAFETY: CycloneDDS はこの呼出し中に書込み可能な iov を渡し、返却後にのみ参照する。
+    let iov = unsafe { &mut *iov };
     trace!(type_name = serdata.type_name());
 
     if let Some(cdr) = &serdata.cdr {
@@ -294,7 +296,8 @@ unsafe extern "C" fn forward_serdata_to_ser_ref<T>(
         error!("Serialization error (SHM)!");
         return std::ptr::null_mut();
     }
-    ddsi_serdata_addref(&serdata.serdata)
+    // SAFETY: serdata は CycloneDDS が所有する有効な参照カウント対象である。
+    unsafe { ddsi_serdata_addref(&serdata.serdata) }
 }
 
 /// 別のserdataが参照を取得するトリガー
@@ -337,7 +340,8 @@ where
     }
 
     let serdata = SerData::<T>::mut_ref_from_serdata(serdata);
-    let iov = &mut *iov;
+    // SAFETY: CycloneDDS はこの呼出し中に書込み可能な iov を渡し、返却後にのみ参照する。
+    let iov = unsafe { &mut *iov };
     trace!(type_name = serdata.type_name());
 
     match &serdata.sample {
@@ -384,7 +388,8 @@ where
         SampleData::ShmData(sample) => {
             if serdata.cdr.is_none() {
                 trace!("do serialization for to_ser_ref");
-                serdata.cdr = serialize_type::<T>(sample.as_ref(), None).ok();
+                // SAFETY: SHM 経路では sample は有効な T を指す。
+                serdata.cdr = unsafe { serialize_type::<T>(sample.as_ref(), None) }.ok();
             }
             if let Some(cdr) = &serdata.cdr {
                 let cdr = if offset < cdr.len() {
@@ -405,7 +410,8 @@ where
             }
         }
     }
-    ddsi_serdata_addref(&serdata.serdata)
+    // SAFETY: serdata は CycloneDDS が所有する有効な参照カウント対象である。
+    unsafe { ddsi_serdata_addref(&serdata.serdata) }
 }
 
 // 2つのserdataのキー値が等しいかテストをする
@@ -451,7 +457,8 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
     }
 
     let mut off: u32 = 0;
-    let fragchain_ref = &*fragchain;
+    // SAFETY: CycloneDDS は先頭から終端まで有効な fragchain を渡す。
+    let fragchain_ref = unsafe { &*fragchain };
     let mut serdata = SerData::<T>::new(sertype, kind);
     trace!(type_name = serdata.type_name(), size);
 
@@ -462,13 +469,16 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
     let mut sg_list = Vec::new();
 
     while !fragchain.is_null() {
-        let fragchain_ref = &*fragchain;
+        // SAFETY: 現在の fragchain 要素とそのペイロード範囲はこの呼出し中に有効である。
+        let fragchain_ref = unsafe { &*fragchain };
         if fragchain_ref.maxp1 > off {
             let payload =
                 nn_rmsg_payload_offset(fragchain_ref.rmsg, nn_rdata_payload_offset(fragchain));
-            let src = payload.add((off - fragchain_ref.min) as usize);
+            // SAFETY: CycloneDDS が渡したペイロードは min..maxp1 の範囲を含む。
+            let src = unsafe { payload.add((off - fragchain_ref.min) as usize) };
             let n_bytes = fragchain_ref.maxp1 - off;
-            sg_list.push(std::slice::from_raw_parts(src, n_bytes as usize));
+            // SAFETY: src から n_bytes は直後に Vec へコピーするまで有効である。
+            sg_list.push(unsafe { std::slice::from_raw_parts(src, n_bytes as usize) });
             off = fragchain_ref.maxp1;
             assert!(off as usize <= size);
         }
@@ -500,10 +510,14 @@ unsafe extern "C" fn serdata_from_ser_iov<T>(
     let mut serdata = SerData::<T>::new(sertype, kind);
     trace!(type_name = serdata.type_name(), serdata = ?serdata.as_ptr(), size, niov);
 
-    let iovs = std::slice::from_raw_parts(iov, niov);
+    // SAFETY: CycloneDDS は niov 個の有効な iovec を渡す。
+    let iovs = unsafe { std::slice::from_raw_parts(iov, niov) };
     let iov_slices: Vec<&[u8]> = iovs
         .iter()
-        .map(|iov| std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len))
+        .map(|iov| {
+            // SAFETY: 各 iovec のバッファは直後に Vec へコピーするまで読み取り可能である。
+            unsafe { std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) }
+        })
         .collect();
 
     // make a reader out of the sg_list
@@ -522,7 +536,8 @@ unsafe extern "C" fn serdata_from_keyhash<T>(
     sertype: *const ddsi_sertype,
     keyhash: *const ddsi_keyhash,
 ) -> *mut ddsi_serdata {
-    let keyhash = (*keyhash).value;
+    // SAFETY: CycloneDDS は呼出し中に読み取り可能な keyhash を渡す。
+    let keyhash = unsafe { (*keyhash).value };
     let sertype_ = SerType::<T>::const_ref_from_sertype(sertype);
     trace!(type_name = sertype_.type_name(), ?keyhash);
 
@@ -564,9 +579,11 @@ where
             // sampleにはSample<T>が書いてある
             // write by [crate::dds_writer::DdsWriter::write_to_entity]
             let sample = sample as *const Sample<T>;
-            let sample = &*sample;
+            // SAFETY: SDK_DATA では write_to_entity が渡した有効な Sample<T> を受け取る。
+            let sample = unsafe { &*sample };
             let sample = sample.get_expected();
-            serdata.serdata.hash = sample.hash((*sertype).serdata_basehash);
+            // SAFETY: sertype は対応する初期化済み ddsi_sertype を指す。
+            serdata.serdata.hash = sample.hash(unsafe { (*sertype).serdata_basehash });
             serdata.sample = SampleData::SdkData(sample);
         }
         SDK_KEY => {
@@ -613,14 +630,15 @@ unsafe extern "C" fn forward_serdata_to_ser<T>(
     let serdata = SerData::<T>::const_ref_from_serdata(serdata);
     trace!(type_name = serdata.type_name(), size, offset);
     let buf = buf as *mut u8;
-    let buf = buf.add(offset);
+    // SAFETY: CycloneDDS は offset から size バイトを書込める連続バッファを渡す。
+    let buf = unsafe { buf.add(offset) };
 
     if size == 0 {
         return;
     }
 
     // CDR済みのデータがあるはずなのでコピーのみ行う
-    if let Some(ref v) = &serdata.cdr {
+    if let Some(v) = &serdata.cdr {
         copy_cdr_data(v.as_slice(), size, offset, buf);
     }
 }
@@ -641,14 +659,15 @@ unsafe extern "C" fn serdata_to_ser<T>(
     let serdata = SerData::<T>::const_ref_from_serdata(serdata);
     trace!(type_name = serdata.type_name(), size, offset);
     let buf = buf as *mut u8;
-    let buf = buf.add(offset);
+    // SAFETY: CycloneDDS は offset から size バイトを書込める連続バッファを渡す。
+    let buf = unsafe { buf.add(offset) };
 
     if size == 0 {
         return;
     }
 
     // CDR済みのデータがあればそれをコピーする
-    if let Some(ref v) = &serdata.cdr {
+    if let Some(v) = &serdata.cdr {
         copy_cdr_data(v.as_slice(), size, offset, buf);
         return;
     }
@@ -660,13 +679,15 @@ unsafe extern "C" fn serdata_to_ser<T>(
             panic!("Attempt to serialize uninitialized serdata")
         }
         SampleData::SdkKey => match &serdata.key_hash {
-            KeyHash::None => std::ptr::write_bytes(buf, 0, size),
+            // SAFETY: buf は size バイトの書込み可能な領域を指す。
+            KeyHash::None => unsafe { std::ptr::write_bytes(buf, 0, size) },
             KeyHash::CdrKey(k) => copy_cdr_data(k, size, offset, buf),
             KeyHash::RawKey(k) => copy_cdr_data(k, size, offset, buf),
         },
         // We may serialize both SDK data as well as SHM Data
         SampleData::SdkData(v) => {
-            let buf_slice = std::slice::from_raw_parts_mut(buf, size);
+            // SAFETY: buf は size バイトの書込み可能な領域を指す。
+            let buf_slice = unsafe { std::slice::from_raw_parts_mut(buf, size) };
             if let Err(e) =
                 cdr::serialize_into::<_, T, _, CdrBe>(buf_slice, v.as_ref(), Bounded(size as u64))
             {
@@ -678,9 +699,17 @@ unsafe extern "C" fn serdata_to_ser<T>(
             }
         }
         SampleData::ShmData(v) => {
-            let buf_slice = std::slice::from_raw_parts_mut(buf, size);
+            // SAFETY: buf は size バイトの書込み可能な領域を指す。
+            let buf_slice = unsafe { std::slice::from_raw_parts_mut(buf, size) };
             if let Err(e) =
-                cdr::serialize_into::<_, T, _, CdrBe>(buf_slice, v.as_ref(), Bounded(size as u64))
+                // SAFETY: SHM 経路では v は有効な T を指す。
+                unsafe {
+                    cdr::serialize_into::<_, T, _, CdrBe>(
+                        buf_slice,
+                        v.as_ref(),
+                        Bounded(size as u64),
+                    )
+                }
             {
                 panic!(
                     "Unable to serialize type {:?} due to {}",
@@ -698,7 +727,8 @@ unsafe extern "C" fn serdata_to_ser<T>(
 unsafe extern "C" fn serdata_to_ser_unref<T>(serdata: *mut ddsi_serdata, _iov: *const iovec) {
     let serdata = SerData::<T>::mut_ref_from_serdata(serdata);
     trace!(type_name = serdata.type_name());
-    ddsi_serdata_removeref(&mut serdata.serdata)
+    // SAFETY: serdata は to_ser_ref が参照を取得した同一オブジェクトである。
+    unsafe { ddsi_serdata_removeref(&mut serdata.serdata) }
 }
 
 // Key値のみを持つ型なしserdataを構築する
@@ -777,7 +807,8 @@ unsafe extern "C" fn serdata_get_keyhash<T>(
     _force_md5: bool,
 ) {
     let serdata = SerData::<T>::const_ref_from_serdata(serdata);
-    let keyhash = &mut *keyhash;
+    // SAFETY: CycloneDDS は書込み可能な ddsi_keyhash を渡す。
+    let keyhash = unsafe { &mut *keyhash };
 
     let src = match &serdata.key_hash {
         KeyHash::None => &[],
@@ -830,7 +861,8 @@ where
     T: Serialize,
 {
     let serdata = SerData::<T>::const_ref_from_serdata(serdata);
-    (*serdata.serdata.type_).iox_size
+    // SAFETY: type_ は serdata に対応する初期化済み ddsi_sertype を指す。
+    unsafe { (*serdata.serdata.type_).iox_size }
 }
 
 // 受信したserdataからサンプルを復元する
@@ -857,8 +889,11 @@ where
     if let SampleData::Uninitialized = serdata.sample {
         // ioxが有効で、iox_chunkがセットされている場合はiox_chunkからデシリアライズする
         if cfg!(feature = "shm") && !serdata.serdata.iox_chunk.is_null() {
-            let iox_header = iceoryx_header_from_chunk(serdata.serdata.iox_chunk);
-            let size = (*iox_header).data_size as usize;
+            // SAFETY: iox_chunk は CycloneDDS が所有する有効な Iceoryx chunk を指す。
+            let size = unsafe {
+                let iox_header = iceoryx_header_from_chunk(serdata.serdata.iox_chunk);
+                (*iox_header).data_size as usize
+            };
             let buf =
                 unsafe { std::slice::from_raw_parts(serdata.serdata.iox_chunk as *const u8, size) };
 
@@ -927,22 +962,36 @@ unsafe extern "C" fn serdata_from_iox_buffer<T>(
         trace!("sertype is null");
         return std::ptr::null_mut();
     }
+    if buffer.is_null() {
+        trace!("iox buffer is null");
+        return std::ptr::null_mut();
+    }
     let mut d = SerData::<T>::new(sertype, kind);
 
     // iox_chunkはserdataに渡して管理を任せる
     d.serdata.iox_chunk = buffer;
-    let iox_header = iceoryx_header_from_chunk(buffer);
-    trace!(type_name = d.type_name(), serdata = ?d.as_ptr(),size = &(*iox_header).data_size, state = &(*iox_header).shm_data_state);
+    // SAFETY: buffer は CycloneDDS が渡した適切に整列された Iceoryx chunk を指す。
+    let iox_header = unsafe { iceoryx_header_from_chunk(buffer) };
+    // SAFETY: iox_header は上記 chunk の有効なヘッダを指す。
+    let (data_size, shm_data_state, keyhash) = unsafe {
+        (
+            (*iox_header).data_size,
+            (*iox_header).shm_data_state,
+            (*iox_header).keyhash.value,
+        )
+    };
+    trace!(type_name = d.type_name(), serdata = ?d.as_ptr(), size = data_size, state = shm_data_state);
 
     // サブスクライバがいる場合は紐付けとkey_hashのコピーを行う
     if !sub.is_null() {
         d.serdata.iox_subscriber = sub;
-        d.key_hash = KeyHash::RawKey((*iox_header).keyhash.value);
+        d.key_hash = KeyHash::RawKey(keyhash);
     }
 
     // シリアライズなしでデータが入っている場合は参照を作る
-    if (*iox_header).shm_data_state == IOX_CHUNK_CONTAINS_RAW_DATA {
-        d.sample = SampleData::ShmData(NonNull::new_unchecked(buffer as *mut T));
+    if shm_data_state == IOX_CHUNK_CONTAINS_RAW_DATA {
+        // SAFETY: raw-data 状態では buffer は非 null の T を指す。
+        d.sample = SampleData::ShmData(unsafe { NonNull::new_unchecked(buffer as *mut T) });
     }
 
     // serdataのポインタを返す
@@ -954,16 +1003,16 @@ unsafe extern "C" fn serdata_from_iox_buffer<T>(
 mod tests {
     use std::{ffi::c_void, mem::MaybeUninit};
 
-    use cyclonedds_sys::{ddsi_sertype, SDK_DATA};
+    use cyclonedds_sys::{SDK_DATA, ddsi_sertype};
 
     use super::*;
     use crate::{
+        DdsParticipant, DdsPublisher, DdsTopic, Sample,
         common::tests::TestTypeAlloc,
         sertype::{
-            tests::{IoxChunk, SerTypeOps, Writer},
             SerType,
+            tests::{IoxChunk, SerTypeOps, Writer},
         },
-        DdsParticipant, DdsPublisher, DdsTopic, Sample,
     };
 
     // serdata_opsの各関数を呼び出すテスト構造体
@@ -1135,8 +1184,8 @@ mod tests {
     #[test_log::test]
     #[ignore = "Iceoryx依存"]
     fn test_serdata_ops_iox() -> anyhow::Result<()> {
-        crate::common::tests::setup_shm_config();
-        let p = DdsParticipant::create(None, None, None)?;
+        let _domain = crate::common::tests::create_shm_domain(4)?;
+        let p = DdsParticipant::create(Some(4), None, None)?;
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serdata_ops_iox", None, None)?;
         let w = Writer::create(&pubb, topic)?;
