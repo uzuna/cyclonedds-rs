@@ -55,9 +55,12 @@ pub use dds_writer::{DdsWriter, WriterBuilder};
 pub use interface_gen::{
     DefRegistry, InterfaceDef, InterfaceElem, InterfaceRef, MsgDefRegistry, NsMode,
 };
-pub use serdes::{Sample, SampleBuffer, TopicType};
+pub use serdes::{FixedTopicType, Sample, SampleBuffer, TopicType};
 
 pub use cdr;
 pub use cyclonedds_sys::dds_error::DDSError;
 
 pub use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "derive")]
+pub use cdds_derive::*;
