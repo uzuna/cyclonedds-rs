@@ -14,7 +14,7 @@ pub struct Untyped;
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::{process::Command, sync::Arc, time::Duration};
 
     use cyclonedds_derive::Topic;
     use serde::{Deserialize, Serialize};
@@ -114,6 +114,40 @@ mod tests {
         fn reader(&self) -> &DdsReader<Untyped> {
             &self.sb.as_ref().unwrap().re
         }
+    }
+
+    #[test]
+    fn test_untyped_ops_survive_domain_teardown() -> anyhow::Result<()> {
+        let status = Command::new(std::env::current_exe()?)
+            .arg("--exact")
+            .arg("untyped::tests::test_untyped_ops_survive_domain_teardown_child")
+            .arg("--nocapture")
+            .env("CYCLONEDDS_RS_OPS_LIFETIME_CHILD", "1")
+            .status()?;
+
+        assert!(status.success(), "子プロセスが異常終了しました: {status}");
+        Ok(())
+    }
+
+    #[test]
+    fn test_untyped_ops_survive_domain_teardown_child() -> anyhow::Result<()> {
+        if std::env::var_os("CYCLONEDDS_RS_OPS_LIFETIME_CHILD").is_none() {
+            return Ok(());
+        }
+
+        let domain = crate::common::tests::create_loopback_domain(22)?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(22, None)?;
+        pubsub.add_reader()?;
+        pubsub.write(Arc::new(TestTypedTopic::default()))?;
+
+        std::thread::sleep(Duration::from_millis(300));
+        let mut samples = SampleBuffer::new(10);
+        assert_eq!(pubsub.reader().takecdr_now(&mut samples)?, 1);
+
+        drop(samples);
+        drop(pubsub);
+        drop(domain);
+        Ok(())
     }
 
     /// DdsWriterで書いたデータが読める

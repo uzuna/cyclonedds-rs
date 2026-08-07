@@ -180,8 +180,11 @@ impl<T> Drop for SerData<T> {
 
 // 型Tを必要とするが、それになんの制約がない。操作
 // プリミティブ型がわかっていれば使える
-pub(crate) fn create_serdata_ops_base<T>() -> Box<ddsi_serdata_ops> {
-    Box::new(ddsi_serdata_ops {
+//
+// `const fn`にしているのは、opsテーブルを型ごとの`'static`な値として持つため。
+// 理由は [crate::sertype::SerType] のopsテーブル定義を参照。
+pub(crate) const fn create_serdata_ops_base<T>() -> ddsi_serdata_ops {
+    ddsi_serdata_ops {
         eqkey: Some(serdata_eqkey::<T>),
         // トランスポートレイヤーからの受信する
         from_ser: Some(serdata_from_fragchain::<T>),
@@ -209,14 +212,20 @@ pub(crate) fn create_serdata_ops_base<T>() -> Box<ddsi_serdata_ops> {
         to_ser: Some(forward_serdata_to_ser::<T>),
         to_ser_ref: Some(forward_serdata_to_ser_ref::<T>),
 
+        // Tにシリアライズ/デシリアライズ実装がないため設定できない操作
+        from_sample: None,
+        to_sample: None,
+        get_sample_size: None,
+
         #[cfg(feature = "shm")]
         from_iox_buffer: Some(serdata_from_iox_buffer::<T>),
-        ..Default::default()
-    })
+        #[cfg(not(feature = "shm"))]
+        from_iox_buffer: None,
+    }
 }
 
 // Tにシリアライズ実装が必要な操作
-pub(crate) fn create_serdata_ops_ser<T>() -> Box<ddsi_serdata_ops>
+pub(crate) const fn create_serdata_ops_ser<T>() -> ddsi_serdata_ops
 where
     T: serde::Serialize,
 {
@@ -231,7 +240,7 @@ where
 }
 
 // Tにシリアライズとデシリアライズ実装が必要な操作
-pub(crate) fn create_serdata_ops_serdes<T>() -> Box<ddsi_serdata_ops>
+pub(crate) const fn create_serdata_ops_serdes<T>() -> ddsi_serdata_ops
 where
     T: serde::Serialize + DeserializeOwned + TopicType,
 {
