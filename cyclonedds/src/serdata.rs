@@ -1194,7 +1194,7 @@ mod tests {
     #[ignore = "Iceoryx依存"]
     fn test_serdata_ops_iox() -> anyhow::Result<()> {
         let _domain = crate::common::tests::create_shm_domain(4)?;
-        let p = DdsParticipant::create(Some(4), None, None)?;
+        let p = unsafe { DdsParticipant::create(Some(4), None, None)? };
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serdata_ops_iox", None, None)?;
         let w = Writer::create(&pubb, topic)?;

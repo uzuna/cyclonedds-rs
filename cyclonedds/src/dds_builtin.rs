@@ -512,7 +512,8 @@ mod tests {
     #[test_log::test]
     async fn test_discovery_participant() -> anyhow::Result<()> {
         let _domain = DdsDomain::create(DOMAIN_TEST_PARTICIPANT_ID, Some(CYCLONE_LOOPBACK_CONFIG))?;
-        let participant = DdsParticipant::create(Some(DOMAIN_TEST_PARTICIPANT_ID), None, None)?;
+        let participant =
+            unsafe { DdsParticipant::create(Some(DOMAIN_TEST_PARTICIPANT_ID), None, None)? };
         let id = participant.guid();
 
         let reader_partic = BuiltinDataReader::<Participants>::create_async(&participant, None)?;
@@ -563,7 +564,8 @@ mod tests {
         let create_task = async {
             // 想定通りなら待たなくても動作は変化しないが、read開始をなんとなく待つ。
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            let participant = DdsParticipant::create(Some(DOMAIN_TEST_PARTICIPANT_ID), None, None)?;
+            let participant =
+                unsafe { DdsParticipant::create(Some(DOMAIN_TEST_PARTICIPANT_ID), None, None)? };
             // readの受信を待つ
             token.cancelled().await;
             drop(participant);
@@ -586,7 +588,8 @@ mod tests {
     #[tokio::test]
     async fn test_discovery_endpoint() -> anyhow::Result<()> {
         let _domain = DdsDomain::create(DOMAIN_TEST_ENDPOINT_ID, Some(CYCLONE_LOOPBACK_CONFIG))?;
-        let participant = DdsParticipant::create(Some(DOMAIN_TEST_ENDPOINT_ID), None, None)?;
+        let participant =
+            unsafe { DdsParticipant::create(Some(DOMAIN_TEST_ENDPOINT_ID), None, None)? };
         let id = participant.guid();
 
         // publisherが不在ならNoDataになることを確認

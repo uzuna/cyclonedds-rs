@@ -222,7 +222,7 @@ mod test {
         );
 
         let _domain = create_loopback_domain(20).unwrap();
-        let participant = DdsParticipant::create(Some(20), None, None).unwrap();
+        let participant = DdsParticipant::get_or_create(Some(20)).unwrap();
         let topic = MyTopic::create_topic(&participant, None, None, None).unwrap();
         let publisher =
             DdsPublisher::create(&participant, None, None).expect("Unable to create publisher");

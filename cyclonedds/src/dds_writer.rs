@@ -351,7 +351,7 @@ mod test {
     fn test_loan() {
         let _domain = crate::common::tests::create_shm_domain(2).unwrap();
 
-        let participant = DdsParticipant::create(Some(2), None, None).unwrap();
+        let participant = unsafe { DdsParticipant::create(Some(2), None, None) }.unwrap();
 
         let topic = TestTopic::create_topic(&participant, Some("test_topic"), None, None).unwrap();
 

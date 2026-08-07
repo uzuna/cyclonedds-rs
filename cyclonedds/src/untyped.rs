@@ -82,7 +82,7 @@ mod tests {
 
     impl PubSub<TestTypedTopic, Untyped> {
         fn new(domain_id: u32, qos: Option<DdsQos>) -> anyhow::Result<Self> {
-            let pa = DdsParticipant::create(Some(domain_id), qos.clone(), None)?;
+            let pa = unsafe { DdsParticipant::create(Some(domain_id), qos.clone(), None)? };
             let t = TestTypedTopic::create_topic(&pa, None, qos.clone(), None)?;
             let pb = Pub::new(&pa, &t)?;
             Ok(Self {
@@ -182,7 +182,7 @@ mod tests {
     fn test_untyped_write_sample() -> anyhow::Result<()> {
         let _source_domain = crate::common::tests::create_loopback_domain(13)?;
         let _destination_domain = crate::common::tests::create_loopback_domain(14)?;
-        let src_parti = DdsParticipant::create(Some(13), None, None)?;
+        let src_parti = unsafe { DdsParticipant::create(Some(13), None, None)? };
         // 扱い型のあるトピック
         let src_topic = TestTypedTopic::create_topic(&src_parti, None, None, None)?;
         let src_pbl = DdsPublisher::create(&src_parti, None, None)?;
@@ -201,7 +201,7 @@ mod tests {
         let src_reader = DdsReader::<Untyped>::create(&src_sub, steel_topic.clone(), None, None)?;
 
         // 転送先であるsrcと別のドメイン
-        let dest_parti = DdsParticipant::create(Some(14), None, None)?;
+        let dest_parti = unsafe { DdsParticipant::create(Some(14), None, None)? };
         let dest_topic = DdsTopic::<Untyped>::create_untyped(
             &dest_parti,
             &TestTypedTopic::topic_name(None),

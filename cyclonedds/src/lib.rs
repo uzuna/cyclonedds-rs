@@ -38,6 +38,7 @@ pub mod interface_gen;
 pub(crate) mod serdata;
 pub mod serdes;
 pub(crate) mod sertype;
+mod shared_registry;
 pub mod untyped;
 pub(crate) mod util;
 

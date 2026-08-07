@@ -476,7 +476,7 @@ mod test {
     #[test]
     fn test_reader_async() {
         let _domain = crate::common::tests::create_loopback_domain(21).unwrap();
-        let participant = DdsParticipant::create(Some(21), None, None).unwrap();
+        let participant = DdsParticipant::get_or_create(Some(21)).unwrap();
 
         let topic = TestTopic::create_topic(&participant, Some("test_topic"), None, None).unwrap();
         let another_topic = AnotherTopic::create_topic(&participant, None, None, None).unwrap();

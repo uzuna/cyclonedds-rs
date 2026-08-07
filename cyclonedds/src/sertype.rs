@@ -642,7 +642,7 @@ pub mod tests {
     #[ignore = "requires iox-roudi to be running"]
     fn test_sertype_ops_serialize() -> anyhow::Result<()> {
         let _domain = crate::common::tests::create_shm_domain(3)?;
-        let p = DdsParticipant::create(Some(3), None, None)?;
+        let p = unsafe { DdsParticipant::create(Some(3), None, None)? };
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serops_iox", None, None)?;
         let mut w = Writer::create(&pubb, topic)?;
