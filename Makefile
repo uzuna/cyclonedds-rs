@@ -4,7 +4,7 @@ fmt:
 
 check-fmt:
 	cargo fmt --all -- --check
-	cargo clippy --all -- -D unsafe_op_in_unsafe_fn
+	cargo clippy --all --all-features -- -D unsafe_op_in_unsafe_fn
 
 test:
-	cargo test --all -- --test-threads=1
+	cargo test --all --all-features -- --test-threads=1
