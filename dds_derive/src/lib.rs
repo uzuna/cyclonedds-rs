@@ -160,27 +160,23 @@ impl Container {
         let mut fixed_size = false;
         let mut typename = quote! {};
         for attr in &item.attrs {
-            if let Some(ident) = attr.path.get_ident()
-                && ident == "cdds"
-                && let Ok(syn::Meta::List(meta_list)) = attr.parse_meta()
-            {
-                for nested_meta in &meta_list.nested {
-                    if let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested_meta {
-                        if path.is_ident("fixed_size") {
-                            fixed_size = true;
-                        }
-                    } else if let syn::NestedMeta::Meta(syn::Meta::NameValue(nv)) = nested_meta
-                        && nv.path.is_ident("typename")
-                        && let syn::Lit::Str(lit_str) = &nv.lit
-                    {
-                        typename = quote! {
-                            fn typename() -> std::ffi::CString {
-                                std::ffi::CString::new(#lit_str).expect("Unable to create CString for type name")
-                            }
-                        };
-                    }
-                }
+            if !attr.path().is_ident("cdds") {
+                continue;
             }
+
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("fixed_size") {
+                    fixed_size = true;
+                } else if meta.path.is_ident("typename") {
+                    let lit_str: syn::LitStr = meta.value()?.parse()?;
+                    typename = quote! {
+                        fn typename() -> std::ffi::CString {
+                            std::ffi::CString::new(#lit_str).expect("Unable to create CString for type name")
+                        }
+                    };
+                }
+                Ok(())
+            });
         }
 
         Container {
@@ -306,7 +302,7 @@ fn struct_has_key(it: &ItemStruct) -> bool {
 
 fn is_key(field: &Field) -> bool {
     for attr in &field.attrs {
-        if let Some(ident) = attr.path.get_ident()
+        if let Some(ident) = attr.path().get_ident()
             && (ident == "topic_key" || ident == "topic_key_enum")
         {
             return true;
@@ -320,7 +316,7 @@ fn is_key(field: &Field) -> bool {
 // which we will treat like primitives.
 fn is_key_enum(field: &Field) -> bool {
     for attr in &field.attrs {
-        if let Some(ident) = attr.path.get_ident()
+        if let Some(ident) = attr.path().get_ident()
             && ident == "topic_key_enum"
         {
             return true;
