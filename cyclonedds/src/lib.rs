@@ -34,6 +34,7 @@ mod dds_waitset;
 pub mod dds_writer;
 pub mod error;
 mod futures;
+pub mod interface_gen;
 pub(crate) mod serdata;
 pub mod serdes;
 pub(crate) mod sertype;
@@ -51,6 +52,9 @@ pub use dds_subscriber::{DdsSubscriber, SubscriberBuilder};
 pub use dds_topic::{DdsTopic, TopicBuilder};
 pub use dds_waitset::DdsWaitset;
 pub use dds_writer::{DdsWriter, WriterBuilder};
+pub use interface_gen::{
+    DefRegistry, InterfaceDef, InterfaceElem, InterfaceRef, MsgDefRegistry, NsMode,
+};
 pub use serdes::{Sample, SampleBuffer, TopicType};
 
 pub use cdr;
