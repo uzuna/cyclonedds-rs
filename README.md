@@ -11,7 +11,7 @@ A refactored fork of the original [cyclonedds-rs](https://github.com/sjames/cycl
 This repository is organized as a Cargo Workspace:
 - `cyclonedds`: High-level, safe Rust API.
 - `cyclonedds-sys`: Raw FFI bindings (generated via bindgen).
-- `cyclonedds-derive`: Procedural macros for DdsType.
+- `cdds_derive`: Procedural macros for DdsType.
 
 ## Acknowledgment
 This project is based on the initial work by [sjames](https://github.com/sjames). We have refactored the architecture to improve maintainability and developer experience.

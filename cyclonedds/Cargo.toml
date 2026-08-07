@@ -23,7 +23,7 @@ default = ["shm"]
 
 [dev-dependencies]
 anyhow = "1"
-cyclonedds-derive.workspace = true
+cdds_derive.workspace = true
 test-log = { version = "0.2.21", default-features = false, features = ["trace"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.19"

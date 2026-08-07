@@ -36,7 +36,7 @@ pub mod tests {
 
     use crate::dds_domain::DdsDomain;
     use crate::*;
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
 
     const CYCLONE_SHM_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>

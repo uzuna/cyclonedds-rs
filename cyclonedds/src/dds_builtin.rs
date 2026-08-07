@@ -468,7 +468,7 @@ impl<T> Drop for BuiltinDataReader<T> {
 
 #[cfg(test)]
 mod tests {
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
 
     use super::*;
     use crate::dds_domain::DdsDomain;

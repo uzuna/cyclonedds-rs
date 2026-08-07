@@ -197,7 +197,7 @@ mod test {
     use crate::SampleBuffer;
     use crate::common::tests::create_loopback_domain;
     use crate::{DdsPublisher, DdsWriter};
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
 

@@ -16,7 +16,7 @@ pub struct Untyped;
 mod tests {
     use std::{process::Command, sync::Arc, time::Duration};
 
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
 
     use super::*;

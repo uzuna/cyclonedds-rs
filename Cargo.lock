@@ -78,6 +78,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdds_derive"
+version = "0.2.1"
+dependencies = [
+ "derive-syn-parse",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "cdr"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -114,22 +124,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "cyclonedds-derive"
-version = "0.2.1"
-dependencies = [
- "derive-syn-parse",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "cyclonedds-rs"
 version = "0.12.0"
 dependencies = [
  "anyhow",
+ "cdds_derive",
  "cdr",
- "cyclonedds-derive",
  "cyclonedds-sys",
  "futures-util",
  "murmur3",

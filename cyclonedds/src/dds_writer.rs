@@ -303,7 +303,7 @@ mod test {
 
     use super::*;
     use crate::*;
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
     use tokio::runtime::Runtime;
 

@@ -408,7 +408,7 @@ mod test {
     use crate::{DdsParticipant, DdsSubscriber};
     use crate::{DdsPublisher, DdsWriter};
 
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
     use tokio::runtime::Runtime;
 

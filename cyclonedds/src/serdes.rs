@@ -339,7 +339,7 @@ impl<'a, T> SampleBuffer<T> {
 mod test {
     use super::*;
     use crate::{DdsListener, DdsParticipant, DdsQos, DdsTopic, sertype::SerType};
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
     use std::ffi::CString;
 
