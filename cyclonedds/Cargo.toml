@@ -1,6 +1,6 @@
 [package]
 name = "cyclonedds-rs"
-version = "0.7.0"
+version = "0.12.0"
 description = "Safe Rust bindings for cyclonedds"
 edition.workspace = true
 license-file.workspace = true
@@ -10,21 +10,21 @@ rust-version.workspace = true
 [dependencies]
 cdr = "0.2.4"
 cyclonedds-sys.workspace = true
-futures-util = "0.3.32"
+futures-util = "0.3.33"
 murmur3 = "0.5.2"
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.18"
 tracing = "0.1.44"
-uuid = "1.21.0"
+uuid = "1.24.0"
 
 [features]
 shm = ["cyclonedds-sys/shm"]
 default = ["shm"]
 
 [dev-dependencies]
-anyhow = "1.0.102"
+anyhow = "1"
 cyclonedds-derive.workspace = true
-test-log = { version = "0.2.19", default-features = false, features = ["trace"] }
-tokio = { version = "1.50.0", features = ["full"] }
-tokio-util = "0.7.16"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
+test-log = { version = "0.2.21", default-features = false, features = ["trace"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7.19"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }

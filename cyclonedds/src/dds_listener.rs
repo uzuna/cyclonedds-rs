@@ -148,59 +148,65 @@ impl From<&DdsListener> for *const dds_listener_t {
 impl DdsListener {
     /// 設定済みクロージャに対応するコールバックを C Listener に登録する。
     unsafe fn register_callbacks(listener: *mut dds_listener_t, callbacks: &Callbacks) {
-        if callbacks.on_data_available.is_some() {
-            dds_lset_data_available(listener, Some(Self::call_data_available_closure));
-        }
-        if callbacks.on_sample_lost.is_some() {
-            dds_lset_sample_lost(listener, Some(Self::call_sample_lost_closure));
-        }
-
-        if callbacks.on_sample_rejected.is_some() {
-            dds_lset_sample_rejected(listener, Some(Self::call_sample_rejected_closure));
-        }
-
-        if callbacks.on_liveliness_changed.is_some() {
-            dds_lset_liveliness_changed(listener, Some(Self::call_liveliness_changed_closure));
-        }
-
-        if callbacks.on_requested_deadline_missed.is_some() {
-            dds_lset_requested_deadline_missed(
-                listener,
-                Some(Self::call_requested_deadline_missed_closure),
-            );
-        }
-        if callbacks.on_requested_incompatible_qos.is_some() {
-            dds_lset_requested_incompatible_qos(
-                listener,
-                Some(Self::call_requested_incompatible_qos_closure),
-            );
-        }
-        if callbacks.on_subscription_matched.is_some() {
-            dds_lset_subscription_matched(listener, Some(Self::call_subscription_matched_closure));
-        }
-        if callbacks.on_liveliness_lost.is_some() {
-            dds_lset_liveliness_lost(listener, Some(Self::call_liveliness_lost_closure));
-        }
-        if callbacks.on_offered_deadline_missed.is_some() {
-            dds_lset_offered_deadline_missed(
-                listener,
-                Some(Self::call_offered_deadline_missed_closure),
-            );
-        }
-        if callbacks.on_offered_incompatible_qos.is_some() {
-            dds_lset_offered_incompatible_qos(
-                listener,
-                Some(Self::call_offered_incompatible_qos_closure),
-            );
-        }
-        if callbacks.on_publication_matched.is_some() {
-            dds_lset_publication_matched(listener, Some(Self::call_publication_matched_closure));
-        }
-        if callbacks.on_inconsistent_topic.is_some() {
-            dds_lset_inconsistent_topic(listener, Some(Self::call_inconsistent_topic_closure));
-        }
-        if callbacks.on_data_on_readers.is_some() {
-            dds_lset_data_on_readers(listener, Some(Self::call_data_on_readers_closure));
+        // SAFETY: listener は dds_create_listener が返した有効なポインタで、登録する関数は C ABI と一致する。
+        unsafe {
+            if callbacks.on_data_available.is_some() {
+                dds_lset_data_available(listener, Some(Self::call_data_available_closure));
+            }
+            if callbacks.on_sample_lost.is_some() {
+                dds_lset_sample_lost(listener, Some(Self::call_sample_lost_closure));
+            }
+            if callbacks.on_sample_rejected.is_some() {
+                dds_lset_sample_rejected(listener, Some(Self::call_sample_rejected_closure));
+            }
+            if callbacks.on_liveliness_changed.is_some() {
+                dds_lset_liveliness_changed(listener, Some(Self::call_liveliness_changed_closure));
+            }
+            if callbacks.on_requested_deadline_missed.is_some() {
+                dds_lset_requested_deadline_missed(
+                    listener,
+                    Some(Self::call_requested_deadline_missed_closure),
+                );
+            }
+            if callbacks.on_requested_incompatible_qos.is_some() {
+                dds_lset_requested_incompatible_qos(
+                    listener,
+                    Some(Self::call_requested_incompatible_qos_closure),
+                );
+            }
+            if callbacks.on_subscription_matched.is_some() {
+                dds_lset_subscription_matched(
+                    listener,
+                    Some(Self::call_subscription_matched_closure),
+                );
+            }
+            if callbacks.on_liveliness_lost.is_some() {
+                dds_lset_liveliness_lost(listener, Some(Self::call_liveliness_lost_closure));
+            }
+            if callbacks.on_offered_deadline_missed.is_some() {
+                dds_lset_offered_deadline_missed(
+                    listener,
+                    Some(Self::call_offered_deadline_missed_closure),
+                );
+            }
+            if callbacks.on_offered_incompatible_qos.is_some() {
+                dds_lset_offered_incompatible_qos(
+                    listener,
+                    Some(Self::call_offered_incompatible_qos_closure),
+                );
+            }
+            if callbacks.on_publication_matched.is_some() {
+                dds_lset_publication_matched(
+                    listener,
+                    Some(Self::call_publication_matched_closure),
+                );
+            }
+            if callbacks.on_inconsistent_topic.is_some() {
+                dds_lset_inconsistent_topic(listener, Some(Self::call_inconsistent_topic_closure));
+            }
+            if callbacks.on_data_on_readers.is_some() {
+                dds_lset_data_on_readers(listener, Some(Self::call_data_on_readers_closure));
+            }
         }
     }
 }
@@ -210,10 +216,12 @@ impl DdsListener {
         reader: dds_entity_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: reader は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let reader = unsafe { DdsEntity::new(reader) };
         if let Some(avail) = &mut callbacks.on_data_available {
-            avail(DdsEntity::new(reader));
+            avail(reader);
         }
     }
 
@@ -222,10 +230,12 @@ impl DdsListener {
         status: dds_sample_lost_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: reader は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let reader = unsafe { DdsEntity::new(reader) };
         if let Some(lost) = &mut callbacks.on_sample_lost {
-            lost(DdsEntity::new(reader), status);
+            lost(reader, status);
         }
     }
 
@@ -234,10 +244,12 @@ impl DdsListener {
         status: dds_sample_rejected_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: reader は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let reader = unsafe { DdsEntity::new(reader) };
         if let Some(rejected) = &mut callbacks.on_sample_rejected {
-            rejected(DdsEntity::new(reader), status);
+            rejected(reader, status);
         }
     }
 
@@ -246,10 +258,12 @@ impl DdsListener {
         status: dds_liveliness_changed_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(changed) = &mut callbacks.on_liveliness_changed {
-            changed(DdsEntity::new(entity), status);
+            changed(entity, status);
         }
     }
 
@@ -258,10 +272,12 @@ impl DdsListener {
         status: dds_requested_deadline_missed_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(missed) = &mut callbacks.on_requested_deadline_missed {
-            missed(DdsEntity::new(entity), status);
+            missed(entity, status);
         }
     }
 
@@ -270,10 +286,12 @@ impl DdsListener {
         status: dds_requested_incompatible_qos_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(incompatible_qos) = &mut callbacks.on_requested_incompatible_qos {
-            incompatible_qos(DdsEntity::new(entity), status);
+            incompatible_qos(entity, status);
         }
     }
 
@@ -282,10 +300,12 @@ impl DdsListener {
         status: dds_subscription_matched_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(matched) = &mut callbacks.on_subscription_matched {
-            matched(DdsEntity::new(entity), status);
+            matched(entity, status);
         }
     }
 
@@ -294,10 +314,12 @@ impl DdsListener {
         status: dds_liveliness_lost_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(lost) = &mut callbacks.on_liveliness_lost {
-            lost(DdsEntity::new(entity), status);
+            lost(entity, status);
         }
     }
 
@@ -306,10 +328,12 @@ impl DdsListener {
         status: dds_offered_deadline_missed_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(missed) = &mut callbacks.on_offered_deadline_missed {
-            missed(DdsEntity::new(entity), status);
+            missed(entity, status);
         }
     }
 
@@ -318,10 +342,12 @@ impl DdsListener {
         status: dds_offered_incompatible_qos_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(incompatible) = &mut callbacks.on_offered_incompatible_qos {
-            incompatible(DdsEntity::new(entity), status);
+            incompatible(entity, status);
         }
     }
 
@@ -330,10 +356,12 @@ impl DdsListener {
         status: dds_publication_matched_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(matched) = &mut callbacks.on_publication_matched {
-            matched(DdsEntity::new(entity), status);
+            matched(entity, status);
         }
     }
 
@@ -342,10 +370,12 @@ impl DdsListener {
         status: dds_inconsistent_topic_status_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(inconsistant) = &mut callbacks.on_inconsistent_topic {
-            inconsistant(DdsEntity::new(entity), status);
+            inconsistant(entity, status);
         }
     }
 
@@ -353,10 +383,12 @@ impl DdsListener {
         entity: dds_entity_t,
         data: *mut std::ffi::c_void,
     ) {
-        let callbacks_ptr = data as *mut Callbacks;
-        let callbacks = &mut *callbacks_ptr;
+        // SAFETY: data は listener の生存中保持する Callbacks を指す。
+        let callbacks = unsafe { &mut *(data as *mut Callbacks) };
+        // SAFETY: entity は CycloneDDS がコールバック中に有効と保証するエンティティである。
+        let entity = unsafe { DdsEntity::new(entity) };
         if let Some(data) = &mut callbacks.on_data_on_readers {
-            data(DdsEntity::new(entity));
+            data(entity);
         }
     }
 }

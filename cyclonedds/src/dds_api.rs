@@ -17,16 +17,14 @@
 use std::convert::From;
 
 use crate::common::Entity;
-pub use cyclonedds_sys::dds_error::DDSError;
 use cyclonedds_sys::DdsEntity;
+pub use cyclonedds_sys::dds_error::DDSError;
 
 //use crate::dds_writer::DdsWriter;
 pub use cyclonedds_sys::dds_status_id;
 pub use cyclonedds_sys::{dds_attach_t, dds_duration_t};
 
 // re-export constants
-pub use cyclonedds_sys::State;
-pub use cyclonedds_sys::StateMask;
 pub use cyclonedds_sys::DDS_DATA_AVAILABLE_STATUS_ID;
 pub use cyclonedds_sys::DDS_DATA_ON_READERS_STATUS_ID;
 pub use cyclonedds_sys::DDS_INCONSISTENT_TOPIC_STATUS_ID;
@@ -40,6 +38,8 @@ pub use cyclonedds_sys::DDS_REQUESTED_INCOMPATIBLE_QOS_STATUS_ID;
 pub use cyclonedds_sys::DDS_SAMPLE_LOST_STATUS_ID;
 pub use cyclonedds_sys::DDS_SAMPLE_REJECTED_STATUS_ID;
 pub use cyclonedds_sys::DDS_SUBSCRIPTION_MATCHED_STATUS_ID;
+pub use cyclonedds_sys::State;
+pub use cyclonedds_sys::StateMask;
 
 #[derive(Default)]
 pub struct DdsStatus(u32);

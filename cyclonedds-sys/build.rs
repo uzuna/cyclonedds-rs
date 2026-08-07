@@ -25,10 +25,10 @@ const SEARCH_TARGETS: &[&str] = &["/usr", "/usr/local"];
 
 fn main() {
     // Don't try to re-generate in docs.rs' build runner.
-    if let Ok(val) = env::var("DOCS_RS") {
-        if val == "1" {
-            return;
-        }
+    if let Ok(val) = env::var("DOCS_RS")
+        && val == "1"
+    {
+        return;
     }
     build::main();
 }

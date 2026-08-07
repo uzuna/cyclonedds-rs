@@ -24,7 +24,7 @@ pub use cyclonedds_sys::DdsEntity;
 use std::marker::PhantomData;
 
 use crate::serdes::{FixedTopicType, Sample, TopicType};
-use crate::{dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic, DdsWritable, Entity};
+use crate::{DdsWritable, Entity, dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic};
 
 pub struct WriterBuilder<T: TopicType> {
     maybe_qos: Option<DdsQos>,
@@ -349,7 +349,7 @@ mod test {
     #[test]
     #[ignore = "requires iox-roudi to be running"]
     fn test_loan() {
-        crate::common::tests::setup_shm_config();
+        let _domain = crate::common::tests::create_shm_domain(2).unwrap();
 
         let participant = DdsParticipant::create(Some(2), None, None).unwrap();
 

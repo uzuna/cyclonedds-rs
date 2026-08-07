@@ -20,7 +20,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, Field, Ident};
+use syn::{Field, Ident, parse_macro_input};
 
 /// TopicTypeを実装するderiveマクロ
 ///
@@ -160,29 +160,24 @@ impl Container {
         let mut fixed_size = false;
         let mut typename = quote! {};
         for attr in &item.attrs {
-            if let Some(ident) = attr.path.get_ident() {
-                if ident == "cdds" {
-                    //parse the attribute meta
-                    if let Ok(syn::Meta::List(meta_list)) = attr.parse_meta() {
-                        for nested_meta in meta_list.nested.iter() {
-                            if let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested_meta {
-                                if path.is_ident("fixed_size") {
-                                    fixed_size = true;
-                                }
-                            } else if let syn::NestedMeta::Meta(syn::Meta::NameValue(nv)) =
-                                nested_meta
-                            {
-                                if nv.path.is_ident("typename") {
-                                    if let syn::Lit::Str(lit_str) = &nv.lit {
-                                        typename = quote! {
-                                            fn typename() -> std::ffi::CString {
-                                                std::ffi::CString::new(#lit_str).expect("Unable to create CString for type name")
-                                            }
-                                        };
-                                    }
-                                }
-                            }
+            if let Some(ident) = attr.path.get_ident()
+                && ident == "cdds"
+                && let Ok(syn::Meta::List(meta_list)) = attr.parse_meta()
+            {
+                for nested_meta in &meta_list.nested {
+                    if let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested_meta {
+                        if path.is_ident("fixed_size") {
+                            fixed_size = true;
                         }
+                    } else if let syn::NestedMeta::Meta(syn::Meta::NameValue(nv)) = nested_meta
+                        && nv.path.is_ident("typename")
+                        && let syn::Lit::Str(lit_str) = &nv.lit
+                    {
+                        typename = quote! {
+                            fn typename() -> std::ffi::CString {
+                                std::ffi::CString::new(#lit_str).expect("Unable to create CString for type name")
+                            }
+                        };
                     }
                 }
             }
@@ -311,10 +306,10 @@ fn struct_has_key(it: &ItemStruct) -> bool {
 
 fn is_key(field: &Field) -> bool {
     for attr in &field.attrs {
-        if let Some(ident) = attr.path.get_ident() {
-            if ident == "topic_key" || ident == "topic_key_enum" {
-                return true;
-            }
+        if let Some(ident) = attr.path.get_ident()
+            && (ident == "topic_key" || ident == "topic_key_enum")
+        {
+            return true;
         }
     }
     false
@@ -325,10 +320,10 @@ fn is_key(field: &Field) -> bool {
 // which we will treat like primitives.
 fn is_key_enum(field: &Field) -> bool {
     for attr in &field.attrs {
-        if let Some(ident) = attr.path.get_ident() {
-            if ident == "topic_key_enum" {
-                return true;
-            }
+        if let Some(ident) = attr.path.get_ident()
+            && ident == "topic_key_enum"
+        {
+            return true;
         }
     }
     false

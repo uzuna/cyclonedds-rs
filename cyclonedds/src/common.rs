@@ -34,6 +34,7 @@ pub trait Entity {
 pub mod tests {
     use std::sync::Arc;
 
+    use crate::dds_domain::DdsDomain;
     use crate::*;
     use cyclonedds_derive::Topic;
     use serde::{Deserialize, Serialize};
@@ -44,21 +45,35 @@ pub mod tests {
                 xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/iceoryx/etc/cyclonedds.xsd">
         <Domain id="any">
             <SharedMemory>
-                <Enable>false</Enable>
-                <LogLevel>info</LogLevel>
-            </SharedMemory>
-        </Domain>
-        <Domain id="2">
-            <SharedMemory>
                 <Enable>true</Enable>
                 <LogLevel>info</LogLevel>
             </SharedMemory>
         </Domain>
     </CycloneDDS>"###;
 
-    /// Shmを使う設定を環境変数にセットする
-    pub fn setup_shm_config() {
-        std::env::set_var("CYCLONEDDS_URI", CYCLONE_SHM_CONFIG);
+    const CYCLONE_LOOPBACK_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>
+    <CycloneDDS xmlns="https://cdds.io/config"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/iceoryx/etc/cyclonedds.xsd">
+        <Domain id="any">
+            <General>
+                <Interfaces>
+                    <NetworkInterface name="lo" priority="default" />
+                </Interfaces>
+            </General>
+        </Domain>
+    </CycloneDDS>"###;
+
+    /// 共有メモリを有効化したテスト用ドメインを作成する
+    pub fn create_shm_domain(domain: cyclonedds_sys::DdsDomainId) -> Result<DdsDomain, DDSError> {
+        DdsDomain::create(domain, Some(CYCLONE_SHM_CONFIG))
+    }
+
+    /// loopback のみを使用するテスト用ドメインを作成する
+    pub fn create_loopback_domain(
+        domain: cyclonedds_sys::DdsDomainId,
+    ) -> Result<DdsDomain, DDSError> {
+        DdsDomain::create(domain, Some(CYCLONE_LOOPBACK_CONFIG))
     }
 
     /// Fixedではない型のテストデータ型

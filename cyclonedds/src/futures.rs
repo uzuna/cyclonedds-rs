@@ -9,7 +9,7 @@ use std::{
 use cyclonedds_sys::DDSError;
 use futures_util::{future::Either, task::AtomicWaker};
 
-use crate::{error::ReaderError, DdsListener, DdsListenerBuilder};
+use crate::{DdsListener, DdsListenerBuilder, error::ReaderError};
 
 /// cycloneddsのコールバックを使って起こすWakerの型
 pub(crate) type AsyncWaker = Arc<(AtomicWaker, Mutex<Option<crate::error::ReaderError>>)>;

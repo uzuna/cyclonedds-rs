@@ -7,17 +7,17 @@ use std::{ffi::CStr, marker::PhantomData};
 
 use cdr::Infinite;
 use cyclonedds_sys::{
-    dds_free_op_t, ddsi_serdata_ops, ddsi_sertype, ddsi_sertype_fini, ddsi_sertype_init,
-    ddsi_sertype_ops, ddsi_sertype_v0, DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT,
+    DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT, dds_free_op_t, ddsi_serdata_ops, ddsi_sertype,
+    ddsi_sertype_fini, ddsi_sertype_init, ddsi_sertype_ops, ddsi_sertype_v0,
 };
 use murmur3::murmur3_32;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use tracing::{trace, warn};
 
 use crate::{
+    Sample, TopicType,
     serdata::{create_serdata_ops_base, create_serdata_ops_serdes},
     util::SGReader,
-    Sample, TopicType,
 };
 
 /// CycloneDDSで特定の型を扱うための情報を保持する構造体
@@ -30,23 +30,73 @@ pub(crate) struct SerType<T> {
 impl<T> SerType<T> {
     const DEFAULT_TYPENAME: &'static str = "Untyped";
 
+    /// Untyped向けのopsテーブル
+    ///
+    /// opsテーブルを型ごとの`'static`にしているのは、opsがsertypeより長生きするため。
+    /// [crate::serdata::serdata_to_untyped]が作るuntyped serdataは`type_`をnullにして
+    /// sertypeへの参照を持たないが、tkmapに載ってドメイン解体(`ddsi_tkmap_free`)まで
+    /// 生存する。この解体時に`serdata->ops->free`が呼ばれるため、sertypeと同じ寿命の
+    /// ヒープ領域にopsを置くと解放済み領域を参照してSEGV/SIGBUSする。
+    /// CycloneDDS本体のopsテーブルもグローバルなconstである。
+    const SERTYPE_OPS_BASE: ddsi_sertype_ops = create_sertype_ops_base::<T>();
+    const SERDATA_OPS_BASE: ddsi_serdata_ops = create_serdata_ops_base::<T>();
+
+    /// SerType<T>を型情報なしで生成する
+    pub fn untyped(type_name: &str) -> Box<SerType<T>> {
+        Box::<SerType<T>>::new(SerType {
+            sertype: {
+                let ctype = std::ffi::CString::new(type_name).unwrap();
+                let mut sertype = std::mem::MaybeUninit::uninit();
+                // 型注釈はopsテーブルが'staticへ昇格していることをコンパイル時に保証する。
+                // 一時変数のままだとsertypeがダングリングポインタを保持してしまう
+                let sertype_ops: &'static ddsi_sertype_ops = &Self::SERTYPE_OPS_BASE;
+                let serdata_ops: &'static ddsi_serdata_ops = &Self::SERDATA_OPS_BASE;
+                unsafe {
+                    ddsi_sertype_init(
+                        sertype.as_mut_ptr(),
+                        ctype.as_ptr(),
+                        sertype_ops,
+                        serdata_ops,
+                        true,
+                    );
+                    let mut sertype = sertype.assume_init();
+                    // Untypedでは型が不明なのでIOXのRAW扱いは出来ない
+                    sertype.set_fixed_size(0);
+                    sertype.iox_size = 0;
+                    sertype
+                }
+            },
+            _phantom: PhantomData,
+        })
+    }
+}
+
+/// シリアライズ実装を持つ型向けのopsテーブルと生成
+impl<T> SerType<T>
+where
+    T: DeserializeOwned + Serialize + TopicType,
+{
+    /// `'static`にする理由は [SerType::SERTYPE_OPS_BASE] と同じ
+    const SERTYPE_OPS_SER: ddsi_sertype_ops = create_sertype_ops_ser::<T>();
+    const SERDATA_OPS_SERDES: ddsi_serdata_ops = create_serdata_ops_serdes::<T>();
+
     /// SerType<T>を生成する
     ///
     /// TODO: DeserializeOwned + Serializeなしで生成できるようにする
-    pub fn new() -> Box<SerType<T>>
-    where
-        T: DeserializeOwned + Serialize + TopicType,
-    {
+    pub fn new() -> Box<SerType<T>> {
         Box::<SerType<T>>::new(SerType {
             sertype: {
                 let mut sertype = std::mem::MaybeUninit::uninit();
+                // 型注釈の意図は [SerType::untyped] と同じ
+                let sertype_ops: &'static ddsi_sertype_ops = &Self::SERTYPE_OPS_SER;
+                let serdata_ops: &'static ddsi_serdata_ops = &Self::SERDATA_OPS_SERDES;
                 unsafe {
                     let type_name = T::typename();
                     ddsi_sertype_init(
                         sertype.as_mut_ptr(),
                         type_name.as_ptr(),
-                        Box::into_raw(create_sertype_ops_ser::<T>()),
-                        Box::into_raw(create_serdata_ops_serdes::<T>()),
+                        sertype_ops,
+                        serdata_ops,
                         !T::has_key(),
                     );
                     let mut sertype = sertype.assume_init();
@@ -64,32 +114,9 @@ impl<T> SerType<T> {
             _phantom: PhantomData,
         })
     }
+}
 
-    /// SerType<T>を型情報なしで生成する
-    pub fn untyped(type_name: &str) -> Box<SerType<T>> {
-        Box::<SerType<T>>::new(SerType {
-            sertype: {
-                let ctype = std::ffi::CString::new(type_name).unwrap();
-                let mut sertype = std::mem::MaybeUninit::uninit();
-                unsafe {
-                    ddsi_sertype_init(
-                        sertype.as_mut_ptr(),
-                        ctype.as_ptr(),
-                        Box::into_raw(create_sertype_ops_base::<T>()),
-                        Box::into_raw(create_serdata_ops_base::<T>()),
-                        true,
-                    );
-                    let mut sertype = sertype.assume_init();
-                    // Untypedでは型が不明なのでIOXのRAW扱いは出来ない
-                    sertype.set_fixed_size(0);
-                    sertype.iox_size = 0;
-                    sertype
-                }
-            },
-            _phantom: PhantomData,
-        })
-    }
-
+impl<T> SerType<T> {
     /// SerType<T>を生ポインタに変換する。CycloneDDSランタイムに管理させる
     pub fn into_sertype(sertype: Box<SerType<T>>) -> *mut ddsi_sertype {
         Box::<SerType<T>>::into_raw(sertype).cast()
@@ -132,20 +159,18 @@ impl<T> Drop for SerType<T> {
         unsafe {
             let sertype = &mut self.sertype as *mut ddsi_sertype;
             // CycloneDDSのsertypeのリソースを開放。type_nameとか。
+            // opsテーブルは型ごとの'staticなので開放しない
             ddsi_sertype_fini(sertype);
-
-            // Rustで確保している領域を開放する
-            let _sertype_ops =
-                Box::<ddsi_sertype_ops>::from_raw((*sertype).ops as *mut ddsi_sertype_ops);
-            let _serdata_ops =
-                Box::<ddsi_serdata_ops>::from_raw((*sertype).serdata_ops as *mut ddsi_serdata_ops);
         }
     }
 }
 
 // sertype_opsの実装。型の大きさが分かれば動作する
-fn create_sertype_ops_base<T>() -> Box<ddsi_sertype_ops> {
-    Box::new(ddsi_sertype_ops {
+//
+// `const fn`にしているのは、opsテーブルを型ごとの`'static`な値として持つため。
+// 理由は [SerType] のopsテーブル定義を参照。
+const fn create_sertype_ops_base<T>() -> ddsi_sertype_ops {
+    ddsi_sertype_ops {
         // version情報。0.10.5時点ではv0のみ
         version: Some(ddsi_sertype_v0),
         // 引数は特に使わないのでnull
@@ -166,17 +191,26 @@ fn create_sertype_ops_base<T>() -> Box<ddsi_sertype_ops> {
         // https://github.com/eclipse-cyclonedds/cyclonedds-cxx/blob/templated-streaming/src/ddscxx/include/org/eclipse/cyclonedds/topic/datatopic.hpp
         hash: Some(sertype_hash::<T>),
 
+        // XTypes向けの型情報。このバインディングでは提供しない
+        type_id: None,
+        type_map: None,
+        type_info: None,
+        derive_sertype: None,
+
         // Unyped実装でも受信でShmを利用するためのダミー関数を設定している
         #[cfg(feature = "shm")]
         get_serialized_size: Some(dummy_sertype_get_serialized_size::<T>),
         #[cfg(feature = "shm")]
         serialize_into: Some(dummy_sertype_serialize_into::<T>),
-        ..Default::default()
-    })
+        #[cfg(not(feature = "shm"))]
+        get_serialized_size: None,
+        #[cfg(not(feature = "shm"))]
+        serialize_into: None,
+    }
 }
 
 // baseに加えて、fixedでない型をシリアライズするための関数を登録する
-fn create_sertype_ops_ser<T>() -> Box<ddsi_sertype_ops>
+const fn create_sertype_ops_ser<T>() -> ddsi_sertype_ops
 where
     T: serde::Serialize,
 {
@@ -306,7 +340,8 @@ unsafe extern "C" fn sertype_hash<T>(tp: *const ddsi_sertype) -> u32 {
     let sertype = SerType::<T>::const_ref_from_sertype(tp);
     trace!(type_name = sertype.type_name());
     // 型名と型サイズでハッシュ値を計算する
-    let type_name = CStr::from_ptr(sertype.sertype.type_name);
+    // SAFETY: type_name は sertype の生存中保持される NUL 終端文字列である。
+    let type_name = unsafe { CStr::from_ptr(sertype.sertype.type_name) };
     let type_name_bytes = type_name.to_bytes();
     let type_size = core::mem::size_of::<T>().to_ne_bytes();
     let sg_list = [type_name_bytes, &type_size];
@@ -396,14 +431,14 @@ pub mod tests {
     use std::{ffi::c_void, marker::PhantomData, sync::Arc};
 
     use cyclonedds_sys::{
-        dds_create_writer, dds_return_loan, dds_write, ddsi_sertype, iceoryx_header,
-        iceoryx_header_from_chunk, DDSError, DdsEntity, DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT,
-        IOX_CHUNK_CONTAINS_SERIALIZED_DATA,
+        DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT, DDSError, DdsEntity,
+        IOX_CHUNK_CONTAINS_SERIALIZED_DATA, dds_create_writer, dds_return_loan, dds_write,
+        ddsi_sertype, iceoryx_header, iceoryx_header_from_chunk,
     };
 
     use crate::{
-        common::tests::TestTypeAlloc, sertype::SerType, DdsParticipant, DdsPublisher, DdsTopic,
-        DdsWritable, Entity, Sample, TopicType,
+        DdsParticipant, DdsPublisher, DdsTopic, DdsWritable, Entity, Sample, TopicType,
+        common::tests::TestTypeAlloc, sertype::SerType,
     };
 
     // IoxChunkテストのためのWriter
@@ -606,8 +641,8 @@ pub mod tests {
     #[test_log::test]
     #[ignore = "requires iox-roudi to be running"]
     fn test_sertype_ops_serialize() -> anyhow::Result<()> {
-        crate::common::tests::setup_shm_config();
-        let p = DdsParticipant::create(None, None, None)?;
+        let _domain = crate::common::tests::create_shm_domain(3)?;
+        let p = DdsParticipant::create(Some(3), None, None)?;
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serops_iox", None, None)?;
         let mut w = Writer::create(&pubb, topic)?;

@@ -14,7 +14,7 @@
     limitations under the License.
 */
 
-use cyclonedds_sys::{dds_error::DDSError, DdsDomainId, DdsEntity};
+use cyclonedds_sys::{DdsDomainId, DdsEntity, dds_error::DDSError};
 use std::convert::From;
 use std::ffi::CString;
 

@@ -5,13 +5,13 @@
 use std::{ffi::CStr, fmt::Debug, marker::PhantomData, sync::Arc};
 
 use cyclonedds_sys::{
-    dds_copy_qos, dds_create_qos, dds_create_reader, dds_delete_qos, dds_free, dds_read,
-    dds_return_loan, dds_sample_info, dds_take, DDSError, DdsEntity,
+    DDSError, DdsEntity, dds_copy_qos, dds_create_qos, dds_create_reader, dds_delete_qos, dds_free,
+    dds_read, dds_return_loan, dds_sample_info, dds_take,
 };
 
 use crate::{
-    futures::{participant_reader_listener, ReaderType},
     DdsListener, DdsParticipant, DdsQos, DdsReadable, Entity, Policy,
+    futures::{ReaderType, participant_reader_listener},
 };
 
 // QoSのユーザー定義型を使って、内部状態に関するプロパティを読み出すための型
@@ -471,6 +471,7 @@ mod tests {
     use cyclonedds_derive::Topic;
 
     use super::*;
+    use crate::dds_domain::DdsDomain;
     use crate::*;
 
     #[derive(Debug, Clone, PartialEq, Topic, Serialize, Deserialize)]
@@ -510,8 +511,7 @@ mod tests {
     #[tokio::test]
     #[test_log::test]
     async fn test_discovery_participant() -> anyhow::Result<()> {
-        // Make sure iox-roudi is running
-        std::env::set_var("CYCLONEDDS_URI", CYCLONE_LOOPBACK_CONFIG);
+        let _domain = DdsDomain::create(DOMAIN_TEST_PARTICIPANT_ID, Some(CYCLONE_LOOPBACK_CONFIG))?;
         let participant = DdsParticipant::create(Some(DOMAIN_TEST_PARTICIPANT_ID), None, None)?;
         let id = participant.guid();
 
@@ -525,9 +525,11 @@ mod tests {
         let res = res.unwrap();
         assert!(res.is_alive());
         let props: Vec<_> = res.props().unwrap().collect();
-        assert!(props
-            .iter()
-            .any(|prop| prop.name == QoSPropertyRef::HOST_NAME));
+        assert!(
+            props
+                .iter()
+                .any(|prop| prop.name == QoSPropertyRef::HOST_NAME)
+        );
         assert!(props.iter().any(|prop| prop.name == QoSPropertyRef::PID));
 
         // 非同期が期待通り0データを無視して待つことを確認
@@ -583,7 +585,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_discovery_endpoint() -> anyhow::Result<()> {
-        std::env::set_var("CYCLONEDDS_URI", CYCLONE_LOOPBACK_CONFIG);
+        let _domain = DdsDomain::create(DOMAIN_TEST_ENDPOINT_ID, Some(CYCLONE_LOOPBACK_CONFIG))?;
         let participant = DdsParticipant::create(Some(DOMAIN_TEST_ENDPOINT_ID), None, None)?;
         let id = participant.guid();
 

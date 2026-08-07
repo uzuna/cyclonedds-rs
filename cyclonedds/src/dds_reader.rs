@@ -22,9 +22,9 @@ use tracing::error;
 
 pub use cyclonedds_sys::{DdsDomainId, DdsEntity};
 
-use crate::futures::{data_reader_listener, ReaderType};
+use crate::futures::{ReaderType, data_reader_listener};
 use crate::serdes::{SampleBuffer, TopicType};
-use crate::{dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic, DdsReadable, Entity};
+use crate::{DdsReadable, Entity, dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic};
 
 /// Builder structure for reader
 pub struct ReaderBuilder<T: TopicType> {
@@ -181,8 +181,8 @@ impl<T> DdsReader<T> {
         take: bool,
     ) -> Result<usize, DDSError> {
         use cyclonedds_sys::{
-            dds_readcdr, dds_takecdr, DDS_ALIVE_INSTANCE_STATE, DDS_ANY_SAMPLE_STATE,
-            DDS_ANY_VIEW_STATE, DDS_NOT_READ_SAMPLE_STATE,
+            DDS_ALIVE_INSTANCE_STATE, DDS_ANY_SAMPLE_STATE, DDS_ANY_VIEW_STATE,
+            DDS_NOT_READ_SAMPLE_STATE, dds_readcdr, dds_takecdr,
         };
         let maxs = buf.capacity();
         // dds_readcdr/dds_takecdrの場合は内部で`to_sample`が呼び出されないため、SerDataで受信を行う
@@ -475,7 +475,8 @@ mod test {
 
     #[test]
     fn test_reader_async() {
-        let participant = DdsParticipant::create(None, None, None).unwrap();
+        let _domain = crate::common::tests::create_loopback_domain(21).unwrap();
+        let participant = DdsParticipant::create(Some(21), None, None).unwrap();
 
         let topic = TestTopic::create_topic(&participant, Some("test_topic"), None, None).unwrap();
         let another_topic = AnotherTopic::create_topic(&participant, None, None, None).unwrap();
