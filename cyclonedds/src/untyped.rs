@@ -292,7 +292,7 @@ mod tests {
                 dds_reliability_kind::DDS_RELIABILITY_RELIABLE,
                 Duration::from_millis(100),
             )
-            .set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 1);
+            .set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 1)?;
         let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(16, Some(qos))?;
 
         // Reader不在で書き込んだデータでも読める

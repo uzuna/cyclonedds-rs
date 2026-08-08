@@ -32,6 +32,19 @@ unsafe impl Send for DdsQos {}
 
 pub struct DdsQos(*mut dds_qos_t);
 
+pub const DDS_INFINITY: dds_duration_t = i64::MAX;
+
+fn to_dds_duration(duration: Duration) -> dds_duration_t {
+    duration.as_nanos().min(DDS_INFINITY as u128) as dds_duration_t
+}
+
+fn validate_history(history: dds_history_kind, depth: i32) -> Result<(), DDSError> {
+    if history == dds_history_kind::DDS_HISTORY_KEEP_LAST && depth <= 0 {
+        return Err(DDSError::BadParameter);
+    }
+    Ok(())
+}
+
 impl DdsQos {
     fn from_dds_duration(value: dds_duration_t) -> Duration {
         if value <= 0 {
@@ -68,11 +81,16 @@ impl DdsQos {
     /// 信頼性のための再送用バッファのサイズを設定する
     ///
     /// 同期のための履歴保持は [Self::set_durability_service] を利用すること
-    pub fn set_history(&mut self, history: dds_history_kind, depth: i32) -> &mut Self {
+    pub fn set_history(
+        &mut self,
+        history: dds_history_kind,
+        depth: i32,
+    ) -> Result<&mut Self, DDSError> {
+        validate_history(history, depth)?;
         unsafe {
             dds_qset_history(self.0, history, depth);
         }
-        self
+        Ok(self)
     }
 
     pub fn set_resource_limits(
@@ -101,14 +119,14 @@ impl DdsQos {
 
     pub fn set_lifespan(&mut self, lifespan: std::time::Duration) -> &mut Self {
         unsafe {
-            dds_qset_lifespan(self.0, lifespan.as_nanos() as i64);
+            dds_qset_lifespan(self.0, to_dds_duration(lifespan));
         }
         self
     }
 
     pub fn set_deadline(&mut self, deadline: std::time::Duration) -> &mut Self {
         unsafe {
-            dds_qset_deadline(self.0, deadline.as_nanos() as i64);
+            dds_qset_deadline(self.0, to_dds_duration(deadline));
         }
         self
     }
@@ -158,7 +176,7 @@ impl DdsQos {
         max_blocking_time: std::time::Duration,
     ) -> &mut Self {
         unsafe {
-            dds_qset_reliability(self.0, kind, max_blocking_time.as_nanos() as i64);
+            dds_qset_reliability(self.0, kind, to_dds_duration(max_blocking_time));
         }
         self
     }
@@ -222,11 +240,12 @@ impl DdsQos {
         max_samples: i32,
         max_instances: i32,
         max_samples_per_instance: i32,
-    ) -> &mut Self {
+    ) -> Result<&mut Self, DDSError> {
+        validate_history(history_kind, history_depth)?;
         unsafe {
             dds_qset_durability_service(
                 self.0,
-                service_cleanup_delay.as_nanos() as i64,
+                to_dds_duration(service_cleanup_delay),
                 history_kind,
                 history_depth,
                 max_samples,
@@ -234,7 +253,7 @@ impl DdsQos {
                 max_samples_per_instance,
             );
         }
-        self
+        Ok(self)
     }
 
     pub fn set_ignorelocal(&mut self, ignore: dds_ignorelocal_kind) -> &mut Self {
@@ -435,25 +454,29 @@ pub struct Policy {
 
 impl Policy {
     const SUPPORT_INSTANCES: i32 = 4;
-    pub fn create_transient_local(history: i32, deadline: Option<Duration>) -> Self {
-        Policy {
+    pub fn create_transient_local(
+        history: i32,
+        deadline: Option<Duration>,
+    ) -> Result<Self, DDSError> {
+        validate_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, history)?;
+        Ok(Policy {
             history: History::KeepLast(history),
             reliability: Reliability::Reliable(deadline.unwrap_or(Duration::from_millis(100))),
             durability: Durability::TransientLocal,
-        }
+        })
     }
 
-    pub fn to_qos(&self) -> DdsQos {
-        let mut qos = DdsQos::create().expect("Unable to create DdsQos");
+    pub fn to_qos(&self) -> Result<DdsQos, DDSError> {
+        let mut qos = DdsQos::create()?;
         // History
         match self.history {
             History::KeepLast(depth) => {
-                qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, depth);
-                let max_sample = depth * Self::SUPPORT_INSTANCES;
+                qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)?;
+                let max_sample = depth.saturating_mul(Self::SUPPORT_INSTANCES);
                 qos.set_resource_limits(max_sample, Self::SUPPORT_INSTANCES, depth);
             }
             History::KeepAll => {
-                qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 0);
+                qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 0)?;
             }
         }
         // Reliability
@@ -487,7 +510,7 @@ impl Policy {
                 }
             }
         }
-        qos
+        Ok(qos)
     }
 }
 
@@ -538,6 +561,37 @@ mod dds_qos_tests {
     use super::*;
 
     #[test]
+    fn test_to_dds_duration_saturates() {
+        assert_eq!(to_dds_duration(Duration::ZERO), 0);
+        assert_eq!(
+            to_dds_duration(Duration::from_secs(9_223_372_037)),
+            DDS_INFINITY
+        );
+        assert_eq!(to_dds_duration(Duration::MAX), DDS_INFINITY);
+    }
+
+    #[test]
+    fn test_set_history_keep_last_rejects_non_positive_depth() {
+        let mut qos = DdsQos::create().unwrap();
+        for depth in [0, -1] {
+            assert_eq!(
+                qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)
+                    .err(),
+                Some(DDSError::BadParameter)
+            );
+        }
+    }
+
+    #[test]
+    fn test_to_qos_rejects_invalid_history_without_panic() {
+        let policy = Policy {
+            history: History::KeepLast(0),
+            ..Default::default()
+        };
+        assert_eq!(policy.to_qos().err(), Some(DDSError::BadParameter));
+    }
+
+    #[test]
     fn test_create_qos() {
         if let Ok(_qos) = DdsQos::create() {
         } else {
@@ -569,6 +623,7 @@ mod dds_qos_tests {
             let _qos = qos
                 .set_durability(dds_durability_kind::DDS_DURABILITY_VOLATILE)
                 .set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, 3)
+                .expect("KEEP_LAST(3) is valid")
                 .set_resource_limits(10, 1, 10)
                 .set_presentation(
                     dds_presentation_access_scope_kind::DDS_PRESENTATION_INSTANCE,
@@ -600,6 +655,7 @@ mod dds_qos_tests {
                     3,
                     3,
                 )
+                .expect("KEEP_LAST(3) is valid")
                 .set_partition(&std::ffi::CString::new("partition1").unwrap());
         } else {
             assert!(false);

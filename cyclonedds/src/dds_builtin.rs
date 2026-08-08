@@ -622,7 +622,7 @@ mod tests {
 
         let token = tokio_util::sync::CancellationToken::new();
         let cancel = token.clone();
-        let policy = Policy::create_transient_local(10, None);
+        let policy = Policy::create_transient_local(10, None)?;
 
         // 参加者が見つかり次第タスクが完了する
         let expect_policy = policy.clone();
@@ -657,7 +657,7 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
             let topic =
-                TestDiscoveryTopic::create_topic(&participant, None, Some(policy.to_qos()), None)?;
+                TestDiscoveryTopic::create_topic(&participant, None, Some(policy.to_qos()?), None)?;
             let publisher = DdsPublisher::create(&participant, None, None)?;
             let mut writer = DdsWriter::create(&publisher, topic, None, None)?;
             writer.write(Arc::new(TestDiscoveryTopic::default()))?;
