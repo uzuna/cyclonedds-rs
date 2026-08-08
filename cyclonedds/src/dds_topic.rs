@@ -22,6 +22,8 @@ use crate::{
 use std::convert::From;
 use std::ffi::CString;
 use std::marker::PhantomData;
+use std::sync::Arc;
+use tracing::error;
 
 use crate::serdes::TopicType;
 pub use cyclonedds_sys::{DDSError, DdsEntity, ddsi_sertype};
@@ -93,17 +95,34 @@ where
 ///
 /// 一部の目的のために受信時のデシリアライズ処理を省略した`Untyped`型を利用したトピックも作成可能
 pub struct DdsTopic<T> {
-    p: DdsEntity,
+    inner: Arc<TopicInner>,
     _marker: PhantomData<T>,
-    _maybe_listener: Option<DdsListener>,
+}
+
+struct TopicInner {
+    entity: DdsEntity,
+    _listener: Option<DdsListener>,
+}
+
+impl Drop for TopicInner {
+    fn drop(&mut self) {
+        unsafe {
+            let ret: DDSError = cyclonedds_sys::dds_delete(self.entity.entity()).into();
+            if DDSError::DdsOk != ret && DDSError::AlreadyDeleted != ret {
+                error!("cannot delete Topic: {}", ret);
+            }
+        }
+    }
 }
 
 impl<T> DdsTopic<T> {
     fn new(p: DdsEntity, maybe_listener: Option<DdsListener>) -> Self {
         DdsTopic {
-            p,
+            inner: Arc::new(TopicInner {
+                entity: p,
+                _listener: maybe_listener,
+            }),
             _marker: PhantomData,
-            _maybe_listener: maybe_listener,
         }
     }
 
@@ -181,13 +200,16 @@ where
 
 impl<T> Entity for DdsTopic<T> {
     fn entity(&self) -> &DdsEntity {
-        &self.p
+        &self.inner.entity
     }
 }
 
 impl<T> Clone for DdsTopic<T> {
     fn clone(&self) -> Self {
-        Self::new(self.p.clone(), self._maybe_listener.clone())
+        Self {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        }
     }
 }
 

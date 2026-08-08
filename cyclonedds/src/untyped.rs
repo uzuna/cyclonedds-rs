@@ -57,18 +57,13 @@ mod tests {
     struct Sub<T> {
         re: DdsReader<T>,
         _sb: DdsSubscriber,
-        _t: DdsTopic<T>,
     }
 
     impl<T> Sub<T> {
         fn new(participant: &DdsParticipant, topic: DdsTopic<T>) -> anyhow::Result<Self> {
             let sb = DdsSubscriber::create(participant, None, None)?;
-            let re = DdsReader::<T>::create(&sb, topic.clone(), None, None)?;
-            Ok(Self {
-                _sb: sb,
-                re,
-                _t: topic,
-            })
+            let re = DdsReader::<T>::create(&sb, topic, None, None)?;
+            Ok(Self { re, _sb: sb })
         }
     }
 

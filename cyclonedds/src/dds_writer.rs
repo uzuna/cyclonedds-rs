@@ -131,16 +131,20 @@ where
 #[derive(Clone)]
 pub struct DdsWriter<T> {
     p: DdsEntity,
+    _topic: DdsTopic<T>,
     _maybe_listener: Option<DdsListener>,
-    _phantom: PhantomData<T>,
 }
 
 impl<T> DdsWriter<T> {
-    fn new(entity: DdsEntity, maybe_listener: Option<DdsListener>) -> DdsWriter<T> {
+    fn new(
+        entity: DdsEntity,
+        topic: DdsTopic<T>,
+        maybe_listener: Option<DdsListener>,
+    ) -> DdsWriter<T> {
         DdsWriter {
             p: entity,
+            _topic: topic,
             _maybe_listener: maybe_listener,
-            _phantom: PhantomData,
         }
     }
 
@@ -161,7 +165,7 @@ impl<T> DdsWriter<T> {
             );
 
             if w >= 0 {
-                Ok(DdsWriter::new(DdsEntity::new(w), maybe_listener))
+                Ok(DdsWriter::new(DdsEntity::new(w), topic, maybe_listener))
             } else {
                 Err(DDSError::from(w))
             }

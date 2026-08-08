@@ -99,22 +99,23 @@ where
 
 struct Inner<T> {
     entity: DdsEntity,
+    _topic: DdsTopic<T>,
     _listener: Option<DdsListener>,
     reader_type: ReaderType,
-    _phantom: PhantomData<T>,
 }
 
 impl<T> Inner<T> {
     fn new(
         entity: DdsEntity,
+        topic: DdsTopic<T>,
         maybe_listener: Option<DdsListener>,
         reader_type: ReaderType,
     ) -> Self {
         Inner {
             entity,
+            _topic: topic,
             _listener: maybe_listener,
             reader_type,
-            _phantom: PhantomData,
         }
     }
 }
@@ -152,7 +153,12 @@ impl<T> DdsReader<T> {
 
             if w > 0 {
                 Ok(DdsReader {
-                    inner: Arc::new(Inner::new(DdsEntity::new(w), maybe_listener, reader_type)),
+                    inner: Arc::new(Inner::new(
+                        DdsEntity::new(w),
+                        topic,
+                        maybe_listener,
+                        reader_type,
+                    )),
                 })
             } else {
                 Err(DDSError::from(w))
