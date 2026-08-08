@@ -22,6 +22,8 @@ mod tests {
     use super::*;
     use crate::*;
 
+    const READ_TIMEOUT: Duration = Duration::from_secs(5);
+
     #[derive(Serialize, Deserialize, Topic, Debug, PartialEq, Clone)]
     struct TestTypedTopic {
         a: u32,
@@ -65,6 +67,12 @@ mod tests {
             let re = DdsReader::<T>::create(&sb, topic, None, None)?;
             Ok(Self { re, _sb: sb })
         }
+
+        fn new_async(participant: &DdsParticipant, topic: DdsTopic<T>) -> anyhow::Result<Self> {
+            let sb = DdsSubscriber::create(participant, None, None)?;
+            let re = DdsReader::<T>::create_async(&sb, topic, None)?;
+            Ok(Self { re, _sb: sb })
+        }
     }
 
     struct PubSub<T1, T2> {
@@ -98,6 +106,18 @@ mod tests {
                 None,
             )?;
             self.sb = Some(Sub::new(&self.pa, t)?);
+            Ok(())
+        }
+
+        fn add_reader_async(&mut self) -> anyhow::Result<()> {
+            let topic = DdsTopic::create_untyped(
+                &self.pa,
+                &TestTypedTopic::topic_name(None),
+                TestTypedTopic::typename().to_string_lossy().as_ref(),
+                self.qos.clone(),
+                None,
+            )?;
+            self.sb = Some(Sub::new_async(&self.pa, topic)?);
             Ok(())
         }
 
@@ -167,6 +187,30 @@ mod tests {
         for sample in buf.iter_sample() {
             let received_bytes = sample.cdr().unwrap();
             assert_eq!(expected, received_bytes);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_untyped_read_async() -> anyhow::Result<()> {
+        let _domain = crate::common::tests::create_loopback_domain(17)?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(17, None)?;
+        pubsub.add_reader_async()?;
+
+        let data = TestTypedTopic::default();
+        let expected = cdr::serialize::<_, _, cdr::CdrBe>(&data, cdr::Infinite)?;
+        pubsub.write(Arc::new(data))?;
+
+        std::thread::sleep(Duration::from_millis(300));
+
+        let mut buf = SampleBuffer::new(10);
+        let size = tokio::time::timeout(READ_TIMEOUT, pubsub.reader().takecdr_async(&mut buf))
+            .await
+            .expect("timeout waiting for the sample")?;
+        assert_eq!(size, 1);
+        assert_eq!(buf.iter_sample().count(), 1);
+        for sample in buf.iter_sample() {
+            assert_eq!(expected, sample.cdr().unwrap());
         }
         Ok(())
     }
