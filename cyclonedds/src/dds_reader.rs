@@ -573,6 +573,14 @@ where
     /// **データが届いたときだけ**完了する。writerの出現/消滅(liveliness変化)や
     /// インスタンスのdisposeでは完了せずPendingのままになる。
     ///
+    /// # 何件得られるか
+    /// 完了時に得られるのは**その時点で到着している分だけ**で、`samples`の容量まで
+    /// 揃う保証はない。writer側が連続して書いた n 件やTransientLocalの履歴 n 件を
+    /// 取りたい場合、1回の呼び出しで n 件返ることを前提にすると件数不足になる。
+    /// 必要な件数が揃うまで呼び出しを繰り返し、上限は呼び出し側で掛けること
+    /// (`docs/receiving-samples.md`)。加えて、reader側の`HISTORY`深さが必要件数以上
+    /// でないと、古いサンプルがRHCで上書きされるため呼び出しを繰り返しても揃わない。
+    ///
     /// [`ReaderBuilder::stop_when_no_writer`]未指定時は、writerが全ていなくなっても
     /// この関数は返らない。writerの消滅を検知したい場合は
     /// [`ReaderBuilder::stop_when_no_writer`]を指定するか、呼び出し側で
@@ -596,6 +604,8 @@ where
     /// 完了条件は[`DdsReader::read_async`]と同じ。加えて、dispose/unregisterの無効サンプルは
     /// ここで**取り出された上で捨てられる**(呼び出し側からは届かなかったように見える)ので、
     /// インスタンスの状態遷移をこの経路で観測することはできない
+    ///
+    /// 何件得られるかの考え方も[`DdsReader::read_async`]と同じ(`# 何件得られるか`を参照)
     pub async fn take_async(
         &self,
         samples: &mut SampleBuffer<T>,

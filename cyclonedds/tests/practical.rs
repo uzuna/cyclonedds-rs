@@ -1,6 +1,6 @@
 //! 実運用で踏んだケースを、有界時間で完了する統合テストとして固定する。
 //!
-//! 待ち方のノウハウは [docs/receiving-samples.md](../docs/receiving-samples.md) に文章として
+//! 待ち方のノウハウは [docs/receiving-samples.md](../../docs/receiving-samples.md) に文章として
 //! まとめてある。ここはその実行可能な形。
 
 mod common;
