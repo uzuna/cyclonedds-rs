@@ -29,7 +29,10 @@ impl<'a> Read for SGReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let read_buf_len = buf.len();
         if let Some(sc_list) = self.sc_list.as_ref() {
-            let source_slice = sc_list[self.slice_cursor];
+            let Some(source_slice) = sc_list.get(self.slice_cursor).copied() else {
+                let _ = self.sc_list.take();
+                return Ok(0);
+            };
             let num_slices = sc_list.len();
             let source_slice_rem = source_slice.len() - self.slice_offset;
             let source_slice = &source_slice[self.slice_offset..];
@@ -94,6 +97,17 @@ mod tests {
             assert_eq!(&buf[..n], vec![6]);
         } else {
             panic!("should not panic");
+        }
+    }
+
+    #[test]
+    fn into_vec_shortage() {
+        let a = vec![1, 2, 3];
+        let sla = unsafe { std::slice::from_raw_parts(a.as_ptr(), a.len()) };
+
+        for (sc_list, size) in [(Vec::new(), 4), (vec![sla], 4)] {
+            let err = SGReader::new(&sc_list).into_vec(size).unwrap_err();
+            assert_eq!(std::io::ErrorKind::UnexpectedEof, err.kind());
         }
     }
 }

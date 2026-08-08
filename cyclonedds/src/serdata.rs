@@ -471,8 +471,10 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
     let mut serdata = SerData::<T>::new(sertype, kind);
     trace!(type_name = serdata.type_name(), size);
 
-    assert_eq!(fragchain_ref.min, 0);
-    assert!(fragchain_ref.maxp1 >= off);
+    if fragchain_ref.min != 0 || fragchain_ref.maxp1 < off {
+        error!(type_name = serdata.type_name(), "invalid fragchain bounds");
+        return std::ptr::null_mut();
+    }
 
     // The scatter gather list
     let mut sg_list = Vec::new();
@@ -489,18 +491,30 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
             // SAFETY: src から n_bytes は直後に Vec へコピーするまで有効である。
             sg_list.push(unsafe { std::slice::from_raw_parts(src, n_bytes as usize) });
             off = fragchain_ref.maxp1;
-            assert!(off as usize <= size);
+            if off as usize > size {
+                error!(
+                    type_name = serdata.type_name(),
+                    off, size, "fragchain exceeds size"
+                );
+                return std::ptr::null_mut();
+            }
         }
         fragchain = fragchain_ref.nextfrag;
     }
 
     // make a reader out of the sg_list
     let reader = SGReader::new(&sg_list);
-    serdata.cdr = Some(
-        reader
-            .into_vec(size)
-            .expect("Failed to read fragchain into vec"),
-    );
+    let cdr = match reader.into_vec(size) {
+        Ok(cdr) => cdr,
+        Err(e) => {
+            error!(
+                type_name = serdata.type_name(),
+                "Failed to read fragchain into vec: {e}"
+            );
+            return std::ptr::null_mut();
+        }
+    };
+    serdata.cdr = Some(cdr);
 
     let ptr = Box::into_raw(serdata);
     ptr as *mut ddsi_serdata
@@ -531,7 +545,14 @@ unsafe extern "C" fn serdata_from_ser_iov<T>(
 
     // make a reader out of the sg_list
     let reader = SGReader::new(&iov_slices);
-    serdata.cdr = Some(reader.into_vec(size).expect("Failed to read iov"));
+    let cdr = match reader.into_vec(size) {
+        Ok(cdr) => cdr,
+        Err(e) => {
+            error!(type_name = serdata.type_name(), "Failed to read iov: {e}");
+            return std::ptr::null_mut();
+        }
+    };
+    serdata.cdr = Some(cdr);
 
     let ptr = Box::into_raw(serdata);
     ptr as *mut ddsi_serdata
