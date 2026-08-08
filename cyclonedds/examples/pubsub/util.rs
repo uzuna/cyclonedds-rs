@@ -16,8 +16,9 @@ pub fn init() {
 ///
 /// DDSエンティティを生成する前、メインスレッドが他スレッドを起動するより前に呼ぶこと
 pub fn use_shm_config() {
+    let config_path = format!("{}/testdata/cyclonedds_shm.xml", env!("CARGO_MANIFEST_DIR"));
     // SAFETY: DDS初期化前にメインスレッドから呼ばれるため、他スレッドが環境変数を読む前に設定できる
-    unsafe { std::env::set_var("CYCLONEDDS_URI", "testdata/cyclonedds_shm.xml") };
+    unsafe { std::env::set_var("CYCLONEDDS_URI", config_path) };
 }
 
 /// monotonic timestampを取得する
