@@ -22,4 +22,3 @@ fn main() {
   codegen::generate_and_compile_datatypes(idls);
 
 }
-

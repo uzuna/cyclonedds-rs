@@ -12,4 +12,3 @@ cyclonedds-sys = "0.1.0"
 
 [build-dependencies]
 cycloneddscodegen = { git = "https://github.com/sjames/cycloneddscodegen.git", features=["rust_codegen"]}
-
