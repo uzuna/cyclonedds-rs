@@ -122,7 +122,9 @@ loop {
 let qos = Policy {
     history: History::KeepLast(10),
     reliability: Reliability::Reliable(std::time::Duration::from_millis(100)),
-    durability: Durability::TransientLocal,
+    durability: Durability::TransientLocal {
+        sync_depth: std::num::NonZeroU16::new(10).unwrap(),
+    },
 }
 .to_qos()?;
 
