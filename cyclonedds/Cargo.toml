@@ -26,6 +26,10 @@ default = ["shm"]
 [dev-dependencies]
 anyhow = "1"
 cdds_derive.workspace = true
+clap = { version = "4.6.4", features = ["derive"] }
+humantime = "2.4.0"
+nix = { version = "0.31.3", features = ["time"] }
+readable_byte = "0.1.14"
 serial_test = "4.0.1"
 test-log = { version = "0.2.21", default-features = false, features = ["trace"] }
 tokio = { version = "1", features = ["full"] }

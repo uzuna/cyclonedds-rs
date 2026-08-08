@@ -1,0 +1,18 @@
+# Iceoryxのリソース解放チェック用のプールが非常に少ない設定ファイル
+[general]
+version = 1
+
+[[segment]]
+
+[[segment.mempool]]
+size = 128
+count = 4
+
+[[segment.mempool]]
+size = 1024
+count = 4
+
+[[segment.mempool]]
+size = 16448
+count = 4
+
