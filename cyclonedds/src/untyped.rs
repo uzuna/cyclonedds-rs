@@ -42,21 +42,21 @@ mod tests {
     }
 
     struct Pub<T> {
-        _pb: DdsPublisher,
         wr: DdsWriter<T>,
+        _pb: DdsPublisher,
     }
 
     impl<T> Pub<T> {
         fn new(participant: &DdsParticipant, topic: &DdsTopic<T>) -> anyhow::Result<Self> {
             let pb = DdsPublisher::create(participant, None, None)?;
             let wr = DdsWriter::create(&pb, topic.clone(), None, None)?;
-            Ok(Self { _pb: pb, wr })
+            Ok(Self { wr, _pb: pb })
         }
     }
 
     struct Sub<T> {
-        _sb: DdsSubscriber,
         re: DdsReader<T>,
+        _sb: DdsSubscriber,
         _t: DdsTopic<T>,
     }
 

@@ -17,6 +17,8 @@
 use crate::{DdsListener, DdsParticipant, DdsQos, DdsReadable};
 pub use cyclonedds_sys::{DDSError, DdsDomainId, DdsEntity};
 use std::convert::From;
+use std::sync::Arc;
+use tracing::error;
 
 pub struct SubscriberBuilder {
     maybe_qos: Option<DdsQos>,
@@ -52,20 +54,24 @@ impl SubscriberBuilder {
     }
 }
 
-#[derive(Clone)]
-pub struct DdsSubscriber {
-    p: DdsEntity,
-    _maybe_listener: Option<DdsListener>,
+struct SubscriberInner {
+    entity: DdsEntity,
+    _listener: Option<DdsListener>,
 }
 
-impl DdsSubscriber {
-    fn new(entity: DdsEntity, maybe_listener: Option<DdsListener>) -> Self {
-        Self {
-            p: entity,
-            _maybe_listener: maybe_listener,
+impl Drop for SubscriberInner {
+    fn drop(&mut self) {
+        unsafe {
+            let ret: DDSError = cyclonedds_sys::dds_delete(self.entity.entity()).into();
+            if DDSError::DdsOk != ret && DDSError::AlreadyDeleted != ret {
+                error!("cannot delete Subscriber: {}", ret);
+            }
         }
     }
 }
+
+#[derive(Clone)]
+pub struct DdsSubscriber(Arc<SubscriberInner>);
 
 impl DdsSubscriber {
     pub fn create(
@@ -82,7 +88,10 @@ impl DdsSubscriber {
                     .map_or(std::ptr::null(), |l| l.into()),
             );
             if p > 0 {
-                Ok(DdsSubscriber::new(DdsEntity::new(p), maybe_listener))
+                Ok(DdsSubscriber(Arc::new(SubscriberInner {
+                    entity: DdsEntity::new(p),
+                    _listener: maybe_listener,
+                })))
             } else {
                 Err(DDSError::from(p))
             }
@@ -92,6 +101,6 @@ impl DdsSubscriber {
 
 impl DdsReadable for DdsSubscriber {
     fn entity(&self) -> &DdsEntity {
-        &self.p
+        &self.0.entity
     }
 }

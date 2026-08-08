@@ -17,6 +17,8 @@
 use crate::{DdsListener, DdsParticipant, DdsQos, DdsWritable};
 pub use cyclonedds_sys::{DDSError, DdsDomainId, DdsEntity};
 use std::convert::From;
+use std::sync::Arc;
+use tracing::error;
 
 pub struct PublisherBuilder {
     maybe_qos: Option<DdsQos>,
@@ -52,20 +54,25 @@ impl PublisherBuilder {
     }
 }
 
-#[derive(Clone)]
-pub struct DdsPublisher {
-    p: DdsEntity,
-    _maybe_listener: Option<DdsListener>,
+struct PublisherInner {
+    entity: DdsEntity,
+    _listener: Option<DdsListener>,
 }
 
-impl DdsPublisher {
-    fn new(entity: DdsEntity, maybe_listener: Option<DdsListener>) -> Self {
-        Self {
-            p: entity,
-            _maybe_listener: maybe_listener,
+impl Drop for PublisherInner {
+    fn drop(&mut self) {
+        unsafe {
+            let ret: DDSError = cyclonedds_sys::dds_delete(self.entity.entity()).into();
+            if DDSError::DdsOk != ret && DDSError::AlreadyDeleted != ret {
+                error!("cannot delete Publisher: {}", ret);
+            }
         }
     }
 }
+
+/// ListenerはDDSの各種イベント発生時のイベントを受け取るためのコールバック関数群を保持する
+#[derive(Clone)]
+pub struct DdsPublisher(Arc<PublisherInner>);
 
 impl DdsPublisher {
     pub fn create(
@@ -82,7 +89,10 @@ impl DdsPublisher {
                     .map_or(std::ptr::null(), |l| l.into()),
             );
             if p > 0 {
-                Ok(DdsPublisher::new(DdsEntity::new(p), maybe_listener))
+                Ok(DdsPublisher(Arc::new(PublisherInner {
+                    entity: DdsEntity::new(p),
+                    _listener: maybe_listener,
+                })))
             } else {
                 Err(DDSError::from(p))
             }
@@ -92,6 +102,6 @@ impl DdsPublisher {
 
 impl DdsWritable for DdsPublisher {
     fn entity(&self) -> &DdsEntity {
-        &self.p
+        &self.0.entity
     }
 }

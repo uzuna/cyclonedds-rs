@@ -370,7 +370,7 @@ where
     fn drop(&mut self) {
         unsafe {
             let ret: DDSError = cyclonedds_sys::dds_delete(self.inner.entity.entity()).into();
-            if DDSError::DdsOk != ret {
+            if DDSError::DdsOk != ret && DDSError::AlreadyDeleted != ret {
                 error!("Ignoring dds_delete failure for DdsReader");
             }
         }
