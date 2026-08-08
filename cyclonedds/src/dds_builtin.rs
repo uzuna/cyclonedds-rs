@@ -515,7 +515,10 @@ mod tests {
     #[tokio::test]
     #[test_log::test]
     async fn test_discovery_participant() -> anyhow::Result<()> {
-        let _domain = DdsDomain::create(DOMAIN_TEST_PARTICIPANT_ID, Some(CYCLONE_LOOPBACK_CONFIG))?;
+        // SAFETY: このテスト専用domainで逐次実行し、Domainより先にParticipantをdropする。
+        let _domain = unsafe {
+            DdsDomain::create(DOMAIN_TEST_PARTICIPANT_ID, Some(CYCLONE_LOOPBACK_CONFIG))
+        }?;
         let participant =
             unsafe { DdsParticipant::create(Some(DOMAIN_TEST_PARTICIPANT_ID), None, None)? };
         let id = participant.guid();
@@ -591,7 +594,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_discovery_endpoint() -> anyhow::Result<()> {
-        let _domain = DdsDomain::create(DOMAIN_TEST_ENDPOINT_ID, Some(CYCLONE_LOOPBACK_CONFIG))?;
+        // SAFETY: このテスト専用domainで逐次実行し、Domainより先にParticipantをdropする。
+        let _domain =
+            unsafe { DdsDomain::create(DOMAIN_TEST_ENDPOINT_ID, Some(CYCLONE_LOOPBACK_CONFIG)) }?;
         let participant =
             unsafe { DdsParticipant::create(Some(DOMAIN_TEST_ENDPOINT_ID), None, None)? };
         let id = participant.guid();

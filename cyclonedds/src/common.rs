@@ -51,19 +51,75 @@ pub trait Entity {
 }
 
 #[cfg(test)]
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestDomain {
+    WriterLoan = 2,
+    ParticipantCreate = 20,
+    ParticipantGetOrCreate,
+    TopicCreation,
+    ReaderAsync,
+    ReaderLiveliness,
+    ReaderNoWriter,
+    ReaderBuilderPriority,
+    SerdataOpsIox,
+    SertypeOpsSerialize,
+    DomainBadConfig,
+    DomainGetOrCreate,
+    DomainSameConfig,
+    DomainConfigMismatch,
+    BuiltinDiscoveryParticipant,
+    BuiltinDiscoveryEndpoint,
+    BuiltinDiscoveryUserdata,
+    UntypedShared,
+    UntypedWriteSampleSrc,
+    UntypedWriteSampleDest,
+    WriterBuilderPriority,
+    WriterNoReader,
+    QosIncompatible,
+    MatchedStatus,
+}
+
+#[cfg(test)]
+impl TestDomain {
+    pub const fn id(self) -> u32 {
+        self as u32
+    }
+}
+
+#[cfg(test)]
 pub mod tests {
-    use std::sync::Arc;
+    use std::collections::BTreeSet;
+    use std::sync::{Arc, Mutex};
 
     use crate::dds_domain::DdsDomain;
     use crate::*;
     use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
 
-    const CYCLONE_SHM_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>
+    static CONFIGURED_DOMAINS: Mutex<BTreeSet<u32>> = Mutex::new(BTreeSet::new());
+
+    pub fn shared_participant_with_config(domain: u32, config: &str) -> &'static DdsParticipant {
+        let mut configured = CONFIGURED_DOMAINS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if configured.insert(domain) {
+            DdsDomain::get_or_create(domain, Some(config)).expect("failed to create test domain");
+        }
+        DdsParticipant::get_or_create(Some(domain)).expect("failed to get test participant")
+    }
+
+    pub const CYCLONE_SHM_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>
     <CycloneDDS xmlns="https://cdds.io/config"
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                 xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/iceoryx/etc/cyclonedds.xsd">
         <Domain id="any">
+            <SharedMemory>
+                <Enable>false</Enable>
+                <LogLevel>info</LogLevel>
+            </SharedMemory>
+        </Domain>
+        <Domain id="2">
             <SharedMemory>
                 <Enable>true</Enable>
                 <LogLevel>info</LogLevel>
@@ -86,14 +142,16 @@ pub mod tests {
 
     /// 共有メモリを有効化したテスト用ドメインを作成する
     pub fn create_shm_domain(domain: cyclonedds_sys::DdsDomainId) -> Result<DdsDomain, DDSError> {
-        DdsDomain::create(domain, Some(CYCLONE_SHM_CONFIG))
+        // SAFETY: 各テストは固有domainを逐次実行し、Domainより先にParticipantをdropする。
+        unsafe { DdsDomain::create(domain, Some(CYCLONE_SHM_CONFIG)) }
     }
 
     /// loopback のみを使用するテスト用ドメインを作成する
     pub fn create_loopback_domain(
         domain: cyclonedds_sys::DdsDomainId,
     ) -> Result<DdsDomain, DDSError> {
-        DdsDomain::create(domain, Some(CYCLONE_LOOPBACK_CONFIG))
+        // SAFETY: 各テストは固有domainを逐次実行し、Domainより先にParticipantをdropする。
+        unsafe { DdsDomain::create(domain, Some(CYCLONE_LOOPBACK_CONFIG)) }
     }
 
     /// Fixedではない型のテストデータ型

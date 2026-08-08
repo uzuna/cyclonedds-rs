@@ -14,6 +14,8 @@
     limitations under the License.
 */
 
+use std::time::Duration;
+
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -22,8 +24,8 @@ pub enum ReaderError {
     RequestedDeadLineMissed,
     #[error("Reader is not async type")]
     ReaderNotAsync,
-    #[error("Publisher liveliness change to [{0}]")]
-    ChangeAliveCount(u32),
+    #[error("no matched writer for {timeout:?}")]
+    NoMatchedWriter { timeout: Duration },
     #[error("DDS Binding error")]
     DdsError(#[from] crate::DDSError),
 }
