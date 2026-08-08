@@ -261,13 +261,16 @@ mod dds_participant_tests {
 
     #[test]
     fn test_create() {
+        let _domain = crate::common::tests::create_loopback_domain(DDS_PARTICIPANT_TEST_CREATE)
+            .expect("failed to create loopback domain");
         let mut qos = DdsQos::create().unwrap();
         qos.set_lifespan(std::time::Duration::from_nanos(1000));
         // SAFETY: このテストは参加者の生成/破棄ライフサイクル自体を検証するため
         // 共有参加者を使えない。DDS_PARTICIPANT_TEST_CREATEはこのテスト専用の
         // ドメインIDであり、同一プロセス内でこのドメインを触る他のテストはない
-        let _par =
-            unsafe { DdsParticipant::create(Some(DDS_PARTICIPANT_TEST_CREATE), Some(qos), None) };
+        let _participant =
+            unsafe { DdsParticipant::create(Some(DDS_PARTICIPANT_TEST_CREATE), Some(qos), None) }
+                .expect("failed to create participant");
     }
 
     /// 同じドメインIDへのget_or_createが常に同じインスタンスを返すことを確認する
