@@ -20,6 +20,7 @@ use std::mem::MaybeUninit;
 use std::num::NonZeroU16;
 use std::time::Duration;
 use std::{clone::Clone, fmt::Debug};
+use tracing::warn;
 
 pub use cyclonedds_sys::{
     dds_destination_order_kind, dds_durability_kind, dds_duration_t, dds_history_kind,
@@ -573,6 +574,11 @@ pub struct Policy {
 
 impl Policy {
     const SUPPORT_INSTANCES: i32 = 4;
+    /// iceoryxがpublisherごとに保持できる履歴の上限(`iox_cfg_max_publisher_history()`の既定値)
+    ///
+    /// `DURABILITY_SERVICE`の深さがこれを超えると、cycloneddsは`dds_writer_supports_shm`で
+    /// ゼロコピー経路を無効化する。エラーもログも出ないので、超えたことを利用者へ伝える必要がある
+    const IOX_MAX_PUBLISHER_HISTORY: i32 = 16;
     /// # Errors
     /// `history`(KEEP_LASTのdepth)が`1..=u16::MAX`の外、つまり0以下または`u16::MAX`超の場合は
     /// [`DDSError::BadParameter`]を返す。上限は同期件数を載せる[`Durability::TransientLocal`]の
@@ -655,6 +661,19 @@ impl Policy {
                     Self::SUPPORT_INSTANCES,
                     depth,
                 )?;
+                if cfg!(feature = "shm") && depth > Self::IOX_MAX_PUBLISHER_HISTORY {
+                    // cyclonedds側は黙ってゼロコピーを落とすだけで何も知らせないため、
+                    // `to_qos()`を呼ぶたびに残す。`to_qos()`はreader/topic用のQoS生成にも
+                    // 使われる(writer専用ではない)ため、writerに使う場合の影響として書く。
+                    // `shm`featureは既定有効なため、CycloneDDS設定側で共有メモリ自体を
+                    // 無効化している利用者にも出うるが、その設定はRust側から観測できないため許容する
+                    warn!(
+                        sync_depth = depth,
+                        limit = Self::IOX_MAX_PUBLISHER_HISTORY,
+                        "TransientLocalの同期件数がiceoryxの上限を超えるため、\
+                         このQoSをwriterに使うと共有メモリのゼロコピー経路が使われない"
+                    );
+                }
                 if self.reliability == Reliability::BestEffort {
                     // TransientLocal で BestEffort は非推奨なので Reliable に変更する
                     qos.set_reliability(
