@@ -3,6 +3,36 @@
 公開APIの互換性を壊す変更を、バージョンごとに記録する。
 移行に必要な書き換えを載せることを目的とし、機能追加は対象としない。
 
+## 0.13.0
+
+### 1. `DdsQos` のQoS取得系が `Option` を返すようになった
+
+```rust
+// Before
+fn durability(&self) -> dds_durability_kind
+fn history(&self) -> (dds_history_kind, i32)
+fn reliability(&self) -> (dds_reliability_kind, Duration)
+fn lifespan(&self) -> Duration
+fn deadline(&self) -> Duration
+fn liveliness(&self) -> (dds_liveliness_kind, Duration)
+
+// After: いずれも Option<...> でくるまれる
+fn durability(&self) -> Option<dds_durability_kind>
+```
+
+cycloneddsの `dds_qget_*` は、該当policyが未設定なら**出力先に一切書かずに `false` を返す**。
+戻り値を検査せず `MaybeUninit::assume_init` していたため、未設定のQoSに対する呼び出しが
+未初期化メモリの読み出しになっていた。`dds_*_kind` はbindgenの `rustified_enum` 指定で
+真のRust enumなので、不正なdiscriminantの生成という即時UBになる。
+`DdsQos` の `Debug` は6つのgetterをすべて呼ぶため、`DdsQos::create()` 直後の
+デバッグ出力だけでも踏める経路だった。
+
+設定済みかどうかを型で表せるよう、既存の `userdata()` に揃えて `Option` を返す。
+未設定を既定値として扱ってよい場合は `unwrap_or_default()` で従来相当になる。
+
+なお `Policy::from(&DdsQos)` は未設定policyを各型の `Default` に落とすため、
+`Policy` 経由で使っている箇所に書き換えは不要。
+
 ## 0.12.0
 
 エンティティのC側の寿命をRustの所有権に合わせる変更。

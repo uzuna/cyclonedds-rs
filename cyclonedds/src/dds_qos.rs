@@ -16,6 +16,7 @@
 
 use cyclonedds_sys::{dds_qos_t, *};
 use std::convert::From;
+use std::mem::MaybeUninit;
 use std::time::Duration;
 use std::{clone::Clone, fmt::Debug};
 
@@ -26,18 +27,41 @@ pub use cyclonedds_sys::{
 };
 
 /// Safety Check:
-/// The dds_qos_t pointer is not accessible externally. I'm assuming the QoS structure created
+/// The dds_qos_t pointer is not accessible externally. I'm assuming the Qos structure created
 /// by Cyclone is Sendable here.
 unsafe impl Send for DdsQos {}
 
 pub struct DdsQos(*mut dds_qos_t);
 
+/// DDSの「無限」を表すduration (`DDS_INFINITY`, dds/ddsrt/time.h では `INT64_MAX`)
 pub const DDS_INFINITY: dds_duration_t = i64::MAX;
 
+/// [`Duration`]をDDSのナノ秒duration(i64)に変換する
+///
+/// `as i64`で素朴に変換すると、i64ナノ秒の上限(約292年)を超える値が
+/// ラップアラウンドして**負値**になる(例: `Duration::MAX` → `-1`)。
+/// DDSの負のdurationは不正値で、失敗はQoSセット時ではなくエンティティ生成時に
+/// `BAD_PARAMETER`として遅れて現れるため、飽和させて`DDS_INFINITY`に丸める
 fn to_dds_duration(duration: Duration) -> dds_duration_t {
     duration.as_nanos().min(DDS_INFINITY as u128) as dds_duration_t
 }
 
+/// DDSのナノ秒duration(i64)を[`Duration`]に変換する
+///
+/// `as u64`で素朴に変換すると、負値が巨大な正の値に化けて
+/// 数百年の[`Duration`]になる。負のdurationはDDSでは不正値なので0に丸める
+fn from_dds_duration(duration: dds_duration_t) -> Duration {
+    Duration::from_nanos(duration.max(0) as u64)
+}
+
+/// `KEEP_LAST`のdepthとして有効な値かを検証する
+///
+/// cycloneddsの`dds_qset_history`は検証しないため、不正値はエンティティ生成時の
+/// `BAD_PARAMETER`として遅れて現れる。設定した箇所で気付けるよう、同じ`BadParameter`を
+/// その場で返す。
+///
+/// Why not panic: QoSは設定ファイルやCLI引数から組み立てられることがあり、
+/// 不正値は呼び出し側が回復すべき入力エラーであってプログラムのバグとは限らない
 fn validate_history(history: dds_history_kind, depth: i32) -> Result<(), DDSError> {
     if history == dds_history_kind::DDS_HISTORY_KEEP_LAST && depth <= 0 {
         return Err(DDSError::BadParameter);
@@ -46,14 +70,6 @@ fn validate_history(history: dds_history_kind, depth: i32) -> Result<(), DDSErro
 }
 
 impl DdsQos {
-    fn from_dds_duration(value: dds_duration_t) -> Duration {
-        if value <= 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_nanos(value as u64)
-        }
-    }
-
     pub fn create() -> Result<Self, DDSError> {
         unsafe {
             let p = cyclonedds_sys::dds_create_qos();
@@ -81,6 +97,10 @@ impl DdsQos {
     /// 信頼性のための再送用バッファのサイズを設定する
     ///
     /// 同期のための履歴保持は [Self::set_durability_service] を利用すること
+    ///
+    /// # Errors
+    /// `KEEP_LAST`で`depth <= 0`を指定した場合(DDS的に不正な組み合わせ)は
+    /// [`DDSError::BadParameter`]を返す
     pub fn set_history(
         &mut self,
         history: dds_history_kind,
@@ -231,7 +251,11 @@ impl DdsQos {
     /// ライブデータの全数配信のためのKEEP_ALLで保証しつつ、
     /// 後から参加者には直近n件のみといった実用上有用な設定をサポートできる設計となっている。
     ///
-    /// Reference: https://github.com/eclipse-cyclonedds/cyclonedds/issues/49
+    /// Reference: <https://github.com/eclipse-cyclonedds/cyclonedds/issues/49>
+    ///
+    /// # Errors
+    /// `history_kind`が`KEEP_LAST`で`history_depth <= 0`の場合は
+    /// [`DDSError::BadParameter`]を返す
     pub fn set_durability_service(
         &mut self,
         service_cleanup_delay: Duration,
@@ -268,59 +292,118 @@ impl DdsQos {
         self
     }
 
-    pub fn durability(&self) -> dds_durability_kind {
-        let mut kind = dds_durability_kind::DDS_DURABILITY_VOLATILE;
+    /// マッチングに影響しない付帯メタデータ(bytes)を設定する。
+    ///
+    /// Subscription/PublicationのbuiltinトピックData(DCPSSubscription/DCPSPublication)に
+    /// 乗って配信されるため、他参加者からも読み取れる。
+    /// 空のデータを渡した場合は未設定と同様に扱われる。
+    pub fn set_userdata(&mut self, data: &[u8]) -> &mut Self {
         unsafe {
-            let _ = dds_qget_durability(self.0, &mut kind as *mut _);
+            let ptr: *const std::ffi::c_void = if data.is_empty() {
+                std::ptr::null()
+            } else {
+                data.as_ptr() as *const std::ffi::c_void
+            };
+            dds_qset_userdata(self.0, ptr, data.len());
         }
-        kind
+        self
     }
 
-    pub fn history(&self) -> (dds_history_kind, i32) {
-        let mut depth = 1;
-        let mut kind = dds_history_kind::DDS_HISTORY_KEEP_LAST;
+    // 以下のgetterが`Option`を返す理由:
+    // cycloneddsの`dds_qget_*`は該当policyが未設定なら出力先に一切書かずfalseを返す。
+    // 戻り値を見ずに`assume_init`すると未初期化メモリを読むことになり、
+    // `dds_*_kind`はrustified enumなので不正なdiscriminantの生成という即時UBになる
+
+    /// 未設定の場合は`None`を返す
+    pub fn durability(&self) -> Option<dds_durability_kind> {
+        let mut kind = MaybeUninit::<dds_durability_kind>::uninit();
         unsafe {
-            let _ = dds_qget_history(self.0, &mut kind as *mut _, &mut depth as *mut i32);
+            if !dds_qget_durability(self.0, kind.as_mut_ptr()) {
+                return None;
+            }
+            Some(kind.assume_init())
         }
-        (kind, depth)
     }
 
-    pub fn reliability(&self) -> (dds_reliability_kind, std::time::Duration) {
-        let mut max_blocking_time = 0;
-        let mut kind = dds_reliability_kind::DDS_RELIABILITY_BEST_EFFORT;
+    /// 未設定の場合は`None`を返す
+    pub fn history(&self) -> Option<(dds_history_kind, i32)> {
         unsafe {
-            let _ = dds_qget_reliability(
-                self.0,
-                &mut kind as *mut _,
-                &mut max_blocking_time as *mut _,
-            );
+            let mut depth = 0;
+            let mut kind = MaybeUninit::<dds_history_kind>::uninit();
+            if !dds_qget_history(self.0, kind.as_mut_ptr(), &mut depth as *mut i32) {
+                return None;
+            }
+            Some((kind.assume_init(), depth))
         }
-        (kind, Self::from_dds_duration(max_blocking_time))
     }
 
-    pub fn lifespan(&self) -> std::time::Duration {
-        let mut lifespan = 0;
+    /// 未設定の場合は`None`を返す
+    pub fn reliability(&self) -> Option<(dds_reliability_kind, Duration)> {
         unsafe {
-            let _ = dds_qget_lifespan(self.0, &mut lifespan as *mut _);
+            let mut max_blocking_time = MaybeUninit::<dds_duration_t>::uninit();
+            let mut kind = MaybeUninit::<dds_reliability_kind>::uninit();
+            if !dds_qget_reliability(self.0, kind.as_mut_ptr(), max_blocking_time.as_mut_ptr()) {
+                return None;
+            }
+            Some((
+                kind.assume_init(),
+                from_dds_duration(max_blocking_time.assume_init()),
+            ))
         }
-        Self::from_dds_duration(lifespan)
     }
 
-    pub fn deadline(&self) -> std::time::Duration {
-        let mut deadline = 0;
+    /// 未設定の場合は`None`を返す
+    pub fn lifespan(&self) -> Option<Duration> {
         unsafe {
-            let _ = dds_qget_deadline(self.0, &mut deadline as *mut _);
+            let mut lifespan = MaybeUninit::<dds_duration_t>::uninit();
+            if !dds_qget_lifespan(self.0, lifespan.as_mut_ptr()) {
+                return None;
+            }
+            Some(from_dds_duration(lifespan.assume_init()))
         }
-        Self::from_dds_duration(deadline)
     }
 
-    pub fn liveliness(&self) -> (dds_liveliness_kind, std::time::Duration) {
-        let mut lease_duration = 0;
-        let mut kind = dds_liveliness_kind::DDS_LIVELINESS_AUTOMATIC;
+    /// 未設定の場合は`None`を返す
+    pub fn deadline(&self) -> Option<Duration> {
         unsafe {
-            let _ = dds_qget_liveliness(self.0, &mut kind as *mut _, &mut lease_duration as *mut _);
+            let mut deadline = MaybeUninit::<dds_duration_t>::uninit();
+            if !dds_qget_deadline(self.0, deadline.as_mut_ptr()) {
+                return None;
+            }
+            Some(from_dds_duration(deadline.assume_init()))
         }
-        (kind, Self::from_dds_duration(lease_duration))
+    }
+
+    pub fn userdata(&self) -> Option<Vec<u8>> {
+        unsafe {
+            let mut value: *mut std::ffi::c_void = std::ptr::null_mut();
+            let mut sz: usize = 0;
+            let ok = dds_qget_userdata(self.0, &mut value, &mut sz);
+            let result = if ok && !value.is_null() && sz > 0 {
+                Some(std::slice::from_raw_parts(value as *const u8, sz).to_vec())
+            } else {
+                None
+            };
+            if !value.is_null() {
+                dds_free(value);
+            }
+            result
+        }
+    }
+
+    /// 未設定の場合は`None`を返す
+    pub fn liveliness(&self) -> Option<(dds_liveliness_kind, Duration)> {
+        unsafe {
+            let mut lease_duration = MaybeUninit::<dds_duration_t>::uninit();
+            let mut kind = MaybeUninit::<dds_liveliness_kind>::uninit();
+            if !dds_qget_liveliness(self.0, kind.as_mut_ptr(), lease_duration.as_mut_ptr()) {
+                return None;
+            }
+            Some((
+                kind.assume_init(),
+                from_dds_duration(lease_duration.assume_init()),
+            ))
+        }
     }
 
     // 内部でポインタからDdsQosを作成する
@@ -364,7 +447,8 @@ impl Clone for DdsQos {
             if let DDSError::DdsOk = err {
                 DdsQos(q)
             } else {
-                panic!("dds_copy_qos failed. Panicking as Clone should not fail");
+                dds_delete_qos(q);
+                panic!("dds_copy_qos failed. Panicing as Clone should not fail");
             }
         }
     }
@@ -454,6 +538,8 @@ pub struct Policy {
 
 impl Policy {
     const SUPPORT_INSTANCES: i32 = 4;
+    /// # Errors
+    /// `history`(KEEP_LASTのdepth)が0以下の場合は[`DDSError::BadParameter`]を返す
     pub fn create_transient_local(
         history: i32,
         deadline: Option<Duration>,
@@ -466,12 +552,18 @@ impl Policy {
         })
     }
 
+    /// このPolicyに対応する[`DdsQos`]を組み立てる
+    ///
+    /// # Errors
+    /// [`Policy`]はpublicフィールドを持つため`History::KeepLast(0)`のような不正な値も
+    /// 構築できる。その場合は[`DDSError::BadParameter`]を返す
     pub fn to_qos(&self) -> Result<DdsQos, DDSError> {
         let mut qos = DdsQos::create()?;
         // History
         match self.history {
             History::KeepLast(depth) => {
                 qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)?;
+                // depthが大きいとi32を溢れて負のリソース上限になるため飽和させる
                 let max_sample = depth.saturating_mul(Self::SUPPORT_INSTANCES);
                 qos.set_resource_limits(max_sample, Self::SUPPORT_INSTANCES, depth);
             }
@@ -516,19 +608,22 @@ impl Policy {
 
 impl From<&DdsQos> for Policy {
     fn from(qos: &DdsQos) -> Self {
-        let history = match qos.history().0 {
-            dds_history_kind::DDS_HISTORY_KEEP_LAST => History::KeepLast(qos.history().1),
-            dds_history_kind::DDS_HISTORY_KEEP_ALL => History::KeepAll,
+        // 未設定のpolicyはDDSの既定値と同じ意味なので、各型のDefaultに落とす
+        let history = match qos.history() {
+            Some((dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)) => History::KeepLast(depth),
+            Some((dds_history_kind::DDS_HISTORY_KEEP_ALL, _)) => History::KeepAll,
+            None => History::default(),
         };
-        let reliability = match qos.reliability().0 {
-            dds_reliability_kind::DDS_RELIABILITY_RELIABLE => {
-                Reliability::Reliable(qos.reliability().1)
+        let reliability = match qos.reliability() {
+            Some((dds_reliability_kind::DDS_RELIABILITY_RELIABLE, max_blocking_time)) => {
+                Reliability::Reliable(max_blocking_time)
             }
-            dds_reliability_kind::DDS_RELIABILITY_BEST_EFFORT => Reliability::BestEffort,
+            Some((dds_reliability_kind::DDS_RELIABILITY_BEST_EFFORT, _)) => Reliability::BestEffort,
+            None => Reliability::default(),
         };
         let durability = match qos.durability() {
-            dds_durability_kind::DDS_DURABILITY_VOLATILE => Durability::Volatile,
-            _ => Durability::TransientLocal,
+            Some(dds_durability_kind::DDS_DURABILITY_VOLATILE) | None => Durability::Volatile,
+            Some(_) => Durability::TransientLocal,
         };
         Policy {
             history,
@@ -540,9 +635,6 @@ impl From<&DdsQos> for Policy {
 
 impl From<*mut dds_qos_t> for Policy {
     fn from(qos: *mut dds_qos_t) -> Self {
-        if qos.is_null() {
-            return Policy::default();
-        }
         let q = DdsQos::from_ptr(qos);
         let p = Policy::from(&q);
         q.forget();
@@ -560,9 +652,20 @@ impl From<*const dds_qos_t> for Policy {
 mod dds_qos_tests {
     use super::*;
 
+    /// i64ナノ秒を超えるDurationがラップアラウンドして負値にならないことを確認する
     #[test]
     fn test_to_dds_duration_saturates() {
         assert_eq!(to_dds_duration(Duration::ZERO), 0);
+        assert_eq!(
+            to_dds_duration(Duration::from_millis(100)),
+            100_000_000,
+            "通常の値はそのままナノ秒になる"
+        );
+        // i64ナノ秒の上限は約292年
+        assert_eq!(
+            to_dds_duration(Duration::from_secs(9_223_372_036)),
+            9_223_372_036_000_000_000
+        );
         assert_eq!(
             to_dds_duration(Duration::from_secs(9_223_372_037)),
             DDS_INFINITY
@@ -570,6 +673,83 @@ mod dds_qos_tests {
         assert_eq!(to_dds_duration(Duration::MAX), DDS_INFINITY);
     }
 
+    /// 負のduration(DDSでは不正値)が巨大な正のDurationに化けないことを確認する
+    #[test]
+    fn test_from_dds_duration_clamps_negative() {
+        assert_eq!(from_dds_duration(0), Duration::ZERO);
+        assert_eq!(from_dds_duration(100_000_000), Duration::from_millis(100));
+        assert_eq!(from_dds_duration(-1), Duration::ZERO);
+        assert_eq!(from_dds_duration(i64::MIN), Duration::ZERO);
+    }
+
+    // Why: `dds_qget_*`は未設定policyでは出力先に書かずfalseを返す。戻り値を無視すると
+    //      未初期化メモリの読み出しになり、rustified enumでは不正discriminantの生成でUBになる
+    // Method: 未設定のQoSで全getterがNoneを返し、設定後は設定値がSomeで返ることを確認する
+    #[test]
+    fn test_qget_returns_none_when_policy_unset() {
+        let mut qos = DdsQos::create().unwrap();
+        let unset = (
+            qos.durability(),
+            qos.history(),
+            qos.reliability(),
+            qos.lifespan(),
+            qos.deadline(),
+            qos.liveliness(),
+        );
+        assert_eq!(unset, (None, None, None, None, None, None));
+
+        qos.set_durability(dds_durability_kind::DDS_DURABILITY_VOLATILE)
+            .set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, 3)
+            .expect("KEEP_LAST(3) is valid")
+            .set_reliability(
+                dds_reliability_kind::DDS_RELIABILITY_RELIABLE,
+                Duration::from_millis(100),
+            )
+            .set_lifespan(Duration::from_millis(200))
+            .set_deadline(Duration::from_millis(300))
+            .set_liveliness(
+                dds_liveliness_kind::DDS_LIVELINESS_AUTOMATIC,
+                to_dds_duration(Duration::from_millis(400)),
+            );
+        let set = (
+            qos.durability(),
+            qos.history(),
+            qos.reliability(),
+            qos.lifespan(),
+            qos.deadline(),
+            qos.liveliness(),
+        );
+        assert_eq!(
+            set,
+            (
+                Some(dds_durability_kind::DDS_DURABILITY_VOLATILE),
+                Some((dds_history_kind::DDS_HISTORY_KEEP_LAST, 3)),
+                Some((
+                    dds_reliability_kind::DDS_RELIABILITY_RELIABLE,
+                    Duration::from_millis(100)
+                )),
+                Some(Duration::from_millis(200)),
+                Some(Duration::from_millis(300)),
+                Some((
+                    dds_liveliness_kind::DDS_LIVELINESS_AUTOMATIC,
+                    Duration::from_millis(400)
+                )),
+            )
+        );
+    }
+
+    // Why: 未設定policyでも`Policy`は組み立てられる必要がある。以前は未初期化値をmatchしており
+    //      分岐先が不定だった
+    // Method: 空のQoSからのPolicyが全項目Defaultになることを確認する
+    #[test]
+    fn test_policy_from_unset_qos_falls_back_to_default() {
+        let qos = DdsQos::create().unwrap();
+        assert_eq!(Policy::from(&qos), Policy::default());
+    }
+
+    // Why: 不正なdepthはエンティティ生成時まで遅れて`BAD_PARAMETER`になるため
+    //      設定した箇所で返す。ただしpanicではなく呼び出し側が回復できるErrにする
+    // Method: KEEP_LASTに0以下を渡すとErr(BadParameter)になることを確認する
     #[test]
     fn test_set_history_keep_last_rejects_non_positive_depth() {
         let mut qos = DdsQos::create().unwrap();
@@ -577,11 +757,22 @@ mod dds_qos_tests {
             assert_eq!(
                 qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)
                     .err(),
-                Some(DDSError::BadParameter)
+                Some(DDSError::BadParameter),
+                "depth={depth}"
             );
         }
     }
 
+    #[test]
+    fn test_set_history_keep_all_ignores_depth() {
+        let mut qos = DdsQos::create().unwrap();
+        qos.set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 0)
+            .expect("KEEP_ALLではdepthを見ない");
+    }
+
+    // Why: `Policy`はpublicフィールドを持ち`History::KeepLast(0)`も構築できてしまう。
+    //      以前はここでpanicしており、docにも`# Panics`が無いため呼び出し側が防げなかった
+    // Method: 不正なPolicyのto_qos()がpanicせずErrを返すことを確認する
     #[test]
     fn test_to_qos_rejects_invalid_history_without_panic() {
         let policy = Policy {
@@ -592,10 +783,19 @@ mod dds_qos_tests {
     }
 
     #[test]
+    fn test_create_transient_local_rejects_non_positive_history() {
+        assert_eq!(
+            Policy::create_transient_local(0, None).err(),
+            Some(DDSError::BadParameter)
+        );
+        assert!(Policy::create_transient_local(1, None).is_ok());
+    }
+
+    #[test]
     fn test_create_qos() {
         if let Ok(_qos) = DdsQos::create() {
         } else {
-            assert!(false);
+            panic!("DdsQos::create() should succeed");
         }
     }
     #[test]
@@ -603,7 +803,7 @@ mod dds_qos_tests {
         if let Ok(qos) = DdsQos::create() {
             let _c = qos;
         } else {
-            assert!(false);
+            panic!("DdsQos::create() should succeed");
         }
     }
 
@@ -613,7 +813,7 @@ mod dds_qos_tests {
             let c = qos.clone();
             qos.merge(&c);
         } else {
-            assert!(false);
+            panic!("DdsQos::create() should succeed");
         }
     }
 
@@ -656,9 +856,23 @@ mod dds_qos_tests {
                     3,
                 )
                 .expect("KEEP_LAST(3) is valid")
-                .set_partition(&std::ffi::CString::new("partition1").unwrap());
+                .set_partition(&std::ffi::CString::new("partition1").unwrap())
+                .set_userdata(b"role=logger");
         } else {
-            assert!(false);
+            panic!("DdsQos::create() should succeed");
         }
+    }
+
+    #[test]
+    fn test_userdata_roundtrip() {
+        let mut qos = DdsQos::create().unwrap();
+        assert_eq!(qos.userdata(), None);
+
+        qos.set_userdata(b"role=logger");
+        assert_eq!(qos.userdata(), Some(b"role=logger".to_vec()));
+
+        // 空データの設定もエラーにならず、未設定と区別なく扱える
+        qos.set_userdata(b"");
+        assert_eq!(qos.userdata(), None);
     }
 }
