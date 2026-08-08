@@ -488,11 +488,19 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
     while !fragchain.is_null() {
         // SAFETY: 現在の fragchain 要素とそのペイロード範囲はこの呼出し中に有効である。
         let fragchain_ref = unsafe { &*fragchain };
+        let Some(frag_offset) = off.checked_sub(fragchain_ref.min) else {
+            error!(
+                type_name = serdata.type_name(),
+                "fragchain is not ordered by offset"
+            );
+            count_discarded_sample(DiscardReason::InvalidFragchain);
+            return std::ptr::null_mut();
+        };
         if fragchain_ref.maxp1 > off {
             let payload =
                 nn_rmsg_payload_offset(fragchain_ref.rmsg, nn_rdata_payload_offset(fragchain));
             // SAFETY: CycloneDDS が渡したペイロードは min..maxp1 の範囲を含む。
-            let src = unsafe { payload.add((off - fragchain_ref.min) as usize) };
+            let src = unsafe { payload.add(frag_offset as usize) };
             let n_bytes = fragchain_ref.maxp1 - off;
             // SAFETY: src から n_bytes は直後に Vec へコピーするまで有効である。
             sg_list.push(unsafe { std::slice::from_raw_parts(src, n_bytes as usize) });

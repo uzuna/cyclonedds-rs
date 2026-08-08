@@ -30,6 +30,8 @@ where
 {
     if let ReaderType::Async(waker) = reader_type {
         Either::Left(future::poll_fn(move |ctx| {
+            waker.0.register(ctx.waker());
+
             // wakerがエラーを持っていたらそれを返す
             if let Some(err) = waker.1.lock().unwrap().take() {
                 return Poll::Ready(Err(err));
@@ -39,7 +41,6 @@ where
                 Ok(len) => Poll::Ready(Ok(len)),
                 Err(DDSError::NoData) => {
                     // データがない場合は次のデータが来るまで待つ
-                    waker.0.register(ctx.waker());
                     Poll::Pending
                 }
                 Err(e) => Poll::Ready(Err(ReaderError::DdsError(e))),
