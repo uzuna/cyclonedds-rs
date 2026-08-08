@@ -1,5 +1,5 @@
 [workspace]
-members = ["cyclonedds", "cyclonedds-sys", "cyclonedds-derive"]
+members = ["cyclonedds", "cyclonedds-sys", "dds_derive"]
 resolver = "2"
 
 [workspace.package]
@@ -11,4 +11,7 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 cyclonedds-sys = { path = "cyclonedds-sys" }
-cyclonedds-derive = { path = "cyclonedds-derive" }
+cdds_derive = { path = "dds_derive" }
+proc-macro2 = "1.0.107"
+quote = "1.0"
+syn = { version = "3.0", features = ["full"] }

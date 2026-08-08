@@ -1,0 +1,31 @@
+[general]
+version = 1
+
+[[segment]]
+
+[[segment.mempool]]
+size = 128
+count = 1000
+
+[[segment.mempool]]
+size = 1024
+count = 1000
+
+[[segment.mempool]]
+size = 4096
+count = 1000
+
+[[segment.mempool]]
+size = 16448
+count = 100
+
+[[segment.mempool]]
+# DCAM target
+# 320*240 *2 Byte = 153600
+size = 196608
+count = 10
+
+[[segment.mempool]]
+# 2MB + 1024B
+size = 2098176
+count = 10

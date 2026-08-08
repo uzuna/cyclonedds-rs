@@ -1,6 +1,6 @@
 [package]
 name = "cyclonedds-rs"
-version = "0.12.0"
+version = "0.13.0"
 description = "Safe Rust bindings for cyclonedds"
 edition.workspace = true
 license-file.workspace = true
@@ -8,6 +8,7 @@ homepage.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+cdds_derive = { workspace = true, optional = true }
 cdr = "0.2.4"
 cyclonedds-sys.workspace = true
 futures-util = "0.3.33"
@@ -18,13 +19,35 @@ tracing = "0.1.44"
 uuid = "1.24.0"
 
 [features]
+derive = ["cdds_derive"]
 shm = ["cyclonedds-sys/shm"]
 default = ["shm"]
 
 [dev-dependencies]
 anyhow = "1"
-cyclonedds-derive.workspace = true
+cdds_derive.workspace = true
+clap = { version = "4.6.4", features = ["derive"] }
+humantime = "2.4.0"
+nix = { version = "0.31.3", features = ["time"] }
+readable_byte = "0.1.14"
+serial_test = "4.0.1"
 test-log = { version = "0.2.21", default-features = false, features = ["trace"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.19"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+
+[[example]]
+name = "dump_interfaces"
+required-features = ["derive"]
+
+[[test]]
+name = "raii"
+required-features = ["derive"]
+
+[[test]]
+name = "interface_gen"
+required-features = ["derive"]
+
+[[test]]
+name = "derive_hygiene"
+required-features = ["derive"]

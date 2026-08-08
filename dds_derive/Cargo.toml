@@ -1,6 +1,6 @@
 [package]
-name = "cyclonedds-derive"
-version = "0.2.1"
+name = "cdds_derive"
+version = "0.3.0"
 description = "Derive macros for cyclonedds-rs"
 edition.workspace = true
 license-file.workspace = true
@@ -8,10 +8,9 @@ homepage.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-derive-syn-parse = "0.1.5"
-proc-macro2 = "1.0.106"
-quote = "1.0"
-syn = { version = "1.0", features = ["full", "extra-traits"] }
+proc-macro2.workspace = true
+quote.workspace = true
+syn.workspace = true
 
 [lib]
 proc-macro = true

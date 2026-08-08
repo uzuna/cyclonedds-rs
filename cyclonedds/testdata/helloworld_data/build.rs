@@ -14,18 +14,11 @@
     limitations under the License.
 */
 
-use std::time::Duration;
+use cycloneddscodegen as codegen;
 
-use thiserror::Error;
+fn main() {
 
-#[derive(Error, Debug, Clone, PartialEq)]
-pub enum ReaderError {
-    #[error("Missed a requested deadline")]
-    RequestedDeadLineMissed,
-    #[error("Reader is not async type")]
-    ReaderNotAsync,
-    #[error("no matched writer for {timeout:?}")]
-    NoMatchedWriter { timeout: Duration },
-    #[error("DDS Binding error")]
-    DdsError(#[from] crate::DDSError),
+  let idls = vec!["idl/HelloWorldData.idl"];
+  codegen::generate_and_compile_datatypes(idls);
+
 }

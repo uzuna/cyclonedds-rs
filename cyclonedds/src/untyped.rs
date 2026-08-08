@@ -16,11 +16,14 @@ pub struct Untyped;
 mod tests {
     use std::{process::Command, sync::Arc, time::Duration};
 
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
 
     use super::*;
+    use crate::common::TestDomain;
     use crate::*;
+
+    const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
     #[derive(Serialize, Deserialize, Topic, Debug, PartialEq, Clone)]
     struct TestTypedTopic {
@@ -42,33 +45,34 @@ mod tests {
     }
 
     struct Pub<T> {
-        _pb: DdsPublisher,
         wr: DdsWriter<T>,
+        _pb: DdsPublisher,
     }
 
     impl<T> Pub<T> {
         fn new(participant: &DdsParticipant, topic: &DdsTopic<T>) -> anyhow::Result<Self> {
             let pb = DdsPublisher::create(participant, None, None)?;
             let wr = DdsWriter::create(&pb, topic.clone(), None, None)?;
-            Ok(Self { _pb: pb, wr })
+            Ok(Self { wr, _pb: pb })
         }
     }
 
     struct Sub<T> {
-        _sb: DdsSubscriber,
         re: DdsReader<T>,
-        _t: DdsTopic<T>,
+        _sb: DdsSubscriber,
     }
 
     impl<T> Sub<T> {
         fn new(participant: &DdsParticipant, topic: DdsTopic<T>) -> anyhow::Result<Self> {
             let sb = DdsSubscriber::create(participant, None, None)?;
-            let re = DdsReader::<T>::create(&sb, topic.clone(), None, None)?;
-            Ok(Self {
-                _sb: sb,
-                re,
-                _t: topic,
-            })
+            let re = DdsReader::<T>::create(&sb, topic, None, None)?;
+            Ok(Self { re, _sb: sb })
+        }
+
+        fn new_async(participant: &DdsParticipant, topic: DdsTopic<T>) -> anyhow::Result<Self> {
+            let sb = DdsSubscriber::create(participant, None, None)?;
+            let re = DdsReader::<T>::create_async(&sb, topic, None)?;
+            Ok(Self { re, _sb: sb })
         }
     }
 
@@ -82,7 +86,7 @@ mod tests {
 
     impl PubSub<TestTypedTopic, Untyped> {
         fn new(domain_id: u32, qos: Option<DdsQos>) -> anyhow::Result<Self> {
-            let pa = DdsParticipant::create(Some(domain_id), qos.clone(), None)?;
+            let pa = unsafe { DdsParticipant::create(Some(domain_id), qos.clone(), None)? };
             let t = TestTypedTopic::create_topic(&pa, None, qos.clone(), None)?;
             let pb = Pub::new(&pa, &t)?;
             Ok(Self {
@@ -103,6 +107,18 @@ mod tests {
                 None,
             )?;
             self.sb = Some(Sub::new(&self.pa, t)?);
+            Ok(())
+        }
+
+        fn add_reader_async(&mut self) -> anyhow::Result<()> {
+            let topic = DdsTopic::create_untyped(
+                &self.pa,
+                &TestTypedTopic::topic_name(None),
+                TestTypedTopic::typename().to_string_lossy().as_ref(),
+                self.qos.clone(),
+                None,
+            )?;
+            self.sb = Some(Sub::new_async(&self.pa, topic)?);
             Ok(())
         }
 
@@ -135,8 +151,9 @@ mod tests {
             return Ok(());
         }
 
-        let domain = crate::common::tests::create_loopback_domain(22)?;
-        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(22, None)?;
+        let domain_id = TestDomain::UntypedOpsTeardown.id();
+        let domain = crate::common::tests::create_loopback_domain(domain_id)?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(domain_id, None)?;
         pubsub.add_reader()?;
         pubsub.write(Arc::new(TestTypedTopic::default()))?;
 
@@ -153,8 +170,9 @@ mod tests {
     /// DdsWriterで書いたデータが読める
     #[test_log::test]
     fn test_untyped_read_sync() -> anyhow::Result<()> {
-        let _domain = crate::common::tests::create_loopback_domain(12)?;
-        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(12, None)?;
+        let domain_id = TestDomain::UntypedReadSync.id();
+        let _domain = crate::common::tests::create_loopback_domain(domain_id)?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(domain_id, None)?;
         pubsub.add_reader()?;
 
         let data = TestTypedTopic::default();
@@ -176,13 +194,41 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_untyped_read_async() -> anyhow::Result<()> {
+        let domain_id = TestDomain::UntypedReadAsync.id();
+        let _domain = crate::common::tests::create_loopback_domain(domain_id)?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(domain_id, None)?;
+        pubsub.add_reader_async()?;
+
+        let data = TestTypedTopic::default();
+        let expected = cdr::serialize::<_, _, cdr::CdrBe>(&data, cdr::Infinite)?;
+        pubsub.write(Arc::new(data))?;
+
+        std::thread::sleep(Duration::from_millis(300));
+
+        let mut buf = SampleBuffer::new(10);
+        let size = tokio::time::timeout(READ_TIMEOUT, pubsub.reader().takecdr_async(&mut buf))
+            .await
+            .expect("timeout waiting for the sample")?;
+        assert_eq!(size, 1);
+        assert_eq!(buf.iter_sample().count(), 1);
+        for sample in buf.iter_sample() {
+            assert_eq!(expected, sample.cdr().unwrap());
+        }
+        Ok(())
+    }
+
     // 既知のサンプルの転送テスト
     // Memo: 同じプロセスだと転送ルートがローカルとなって、期待するネットワーク通信のテストにならないかも?
     #[test_log::test]
     fn test_untyped_write_sample() -> anyhow::Result<()> {
-        let _source_domain = crate::common::tests::create_loopback_domain(13)?;
-        let _destination_domain = crate::common::tests::create_loopback_domain(14)?;
-        let src_parti = DdsParticipant::create(Some(13), None, None)?;
+        let source_domain_id = TestDomain::UntypedWriteSampleSrc.id();
+        let destination_domain_id = TestDomain::UntypedWriteSampleDest.id();
+        let _source_domain = crate::common::tests::create_loopback_domain(source_domain_id)?;
+        let _destination_domain =
+            crate::common::tests::create_loopback_domain(destination_domain_id)?;
+        let src_parti = unsafe { DdsParticipant::create(Some(source_domain_id), None, None)? };
         // 扱い型のあるトピック
         let src_topic = TestTypedTopic::create_topic(&src_parti, None, None, None)?;
         let src_pbl = DdsPublisher::create(&src_parti, None, None)?;
@@ -201,7 +247,8 @@ mod tests {
         let src_reader = DdsReader::<Untyped>::create(&src_sub, steel_topic.clone(), None, None)?;
 
         // 転送先であるsrcと別のドメイン
-        let dest_parti = DdsParticipant::create(Some(14), None, None)?;
+        let dest_parti =
+            unsafe { DdsParticipant::create(Some(destination_domain_id), None, None)? };
         let dest_topic = DdsTopic::<Untyped>::create_untyped(
             &dest_parti,
             &TestTypedTopic::topic_name(None),
@@ -245,7 +292,8 @@ mod tests {
     // 揮発性データ
     #[test_log::test]
     fn test_untyped_volatile() -> anyhow::Result<()> {
-        let _domain = crate::common::tests::create_loopback_domain(15)?;
+        let domain_id = TestDomain::UntypedVolatile.id();
+        let _domain = crate::common::tests::create_loopback_domain(domain_id)?;
         let mut qos = DdsQos::create()?;
         qos.set_deadline(Duration::from_millis(100))
             .set_reliability(
@@ -253,7 +301,7 @@ mod tests {
                 Duration::from_millis(50),
             )
             .set_durability(dds_durability_kind::DDS_DURABILITY_VOLATILE);
-        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(15, Some(qos))?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(domain_id, Some(qos))?;
 
         // Reader不在で書き込んだデータは読めない
         let data = TestTypedTopic::default();
@@ -284,7 +332,8 @@ mod tests {
     // 3. ReliabilityをRELIABLEに設定。データの欠落を許容しない
     #[test_log::test]
     fn test_untyped_transient_local() -> anyhow::Result<()> {
-        let _domain = crate::common::tests::create_loopback_domain(16)?;
+        let domain_id = TestDomain::UntypedTransientLocal.id();
+        let _domain = crate::common::tests::create_loopback_domain(domain_id)?;
         let mut qos = DdsQos::create()?;
         qos.set_deadline(Duration::from_secs(60 * 60))
             .set_durability(dds_durability_kind::DDS_DURABILITY_TRANSIENT_LOCAL)
@@ -292,8 +341,8 @@ mod tests {
                 dds_reliability_kind::DDS_RELIABILITY_RELIABLE,
                 Duration::from_millis(100),
             )
-            .set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 1);
-        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(16, Some(qos))?;
+            .set_history(dds_history_kind::DDS_HISTORY_KEEP_ALL, 1)?;
+        let mut pubsub = PubSub::<TestTypedTopic, Untyped>::new(domain_id, Some(qos))?;
 
         // Reader不在で書き込んだデータでも読める
         let data = TestTypedTopic::default();

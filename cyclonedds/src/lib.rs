@@ -34,26 +34,41 @@ mod dds_waitset;
 pub mod dds_writer;
 pub mod error;
 mod futures;
+pub mod interface_gen;
+mod match_watch;
 pub(crate) mod serdata;
 pub mod serdes;
 pub(crate) mod sertype;
+mod shared_registry;
+pub mod stats;
 pub mod untyped;
 pub(crate) mod util;
 
-pub use common::{DdsReadable, DdsWritable, Entity};
+pub use common::{DdsReadable, DdsWritable, Entity, Keepalive};
 pub use dds_api::*;
+pub use dds_domain::DdsDomain;
 pub use dds_listener::{DdsListener, DdsListenerBuilder};
 pub use dds_participant::{DdsParticipant, ParticipantBuilder};
 pub use dds_publisher::{DdsPublisher, PublisherBuilder};
 pub use dds_qos::*;
-pub use dds_reader::{DdsReadCondition, DdsReader, ReaderBuilder};
+pub use dds_reader::{
+    DdsReadCondition, DdsReader, LivelinessChangedStatus, ReaderBuilder,
+    RequestedDeadlineMissedStatus, SubscriptionMatchedStatus,
+};
 pub use dds_subscriber::{DdsSubscriber, SubscriberBuilder};
 pub use dds_topic::{DdsTopic, TopicBuilder};
 pub use dds_waitset::DdsWaitset;
-pub use dds_writer::{DdsWriter, WriterBuilder};
-pub use serdes::{Sample, SampleBuffer, TopicType};
+pub use dds_writer::{DdsWriter, PublicationMatchedStatus, WriterBuilder};
+pub use interface_gen::{
+    DefRegistry, InterfaceDef, InterfaceElem, InterfaceRef, MsgDefRegistry, NsMode,
+};
+pub use serdes::{FixedTopicType, Sample, SampleBuffer, TopicType};
+pub use stats::{DiscardedSamples, discarded_samples};
 
 pub use cdr;
 pub use cyclonedds_sys::dds_error::DDSError;
 
 pub use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "derive")]
+pub use cdds_derive::*;

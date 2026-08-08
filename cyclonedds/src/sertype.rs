@@ -438,7 +438,8 @@ pub mod tests {
 
     use crate::{
         DdsParticipant, DdsPublisher, DdsTopic, DdsWritable, Entity, Sample, TopicType,
-        common::tests::TestTypeAlloc, sertype::SerType,
+        common::{TestDomain, tests::TestTypeAlloc},
+        sertype::SerType,
     };
 
     // IoxChunkテストのためのWriter
@@ -641,8 +642,9 @@ pub mod tests {
     #[test_log::test]
     #[ignore = "requires iox-roudi to be running"]
     fn test_sertype_ops_serialize() -> anyhow::Result<()> {
-        let _domain = crate::common::tests::create_shm_domain(3)?;
-        let p = DdsParticipant::create(Some(3), None, None)?;
+        let domain_id = TestDomain::SertypeOpsSerialize.id();
+        let _domain = crate::common::tests::create_shm_domain(domain_id)?;
+        let p = unsafe { DdsParticipant::create(Some(domain_id), None, None)? };
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serops_iox", None, None)?;
         let mut w = Writer::create(&pubb, topic)?;

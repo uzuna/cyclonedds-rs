@@ -21,7 +21,12 @@ use cyclonedds_sys::{
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::{error, trace, warn};
 
-use crate::{Sample, TopicType, sertype::SerType, util::SGReader};
+use crate::{
+    Sample, TopicType,
+    sertype::SerType,
+    stats::{DiscardReason, count_discarded_sample},
+    util::SGReader,
+};
 
 /// キー値のハッシュを保持する列挙型
 /// 仕様はDDSIエンコーディング仕様書に従う
@@ -471,8 +476,11 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
     let mut serdata = SerData::<T>::new(sertype, kind);
     trace!(type_name = serdata.type_name(), size);
 
-    assert_eq!(fragchain_ref.min, 0);
-    assert!(fragchain_ref.maxp1 >= off);
+    if fragchain_ref.min != 0 || fragchain_ref.maxp1 < off {
+        error!(type_name = serdata.type_name(), "invalid fragchain bounds");
+        count_discarded_sample(DiscardReason::InvalidFragchain);
+        return std::ptr::null_mut();
+    }
 
     // The scatter gather list
     let mut sg_list = Vec::new();
@@ -480,27 +488,49 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
     while !fragchain.is_null() {
         // SAFETY: 現在の fragchain 要素とそのペイロード範囲はこの呼出し中に有効である。
         let fragchain_ref = unsafe { &*fragchain };
+        let Some(frag_offset) = off.checked_sub(fragchain_ref.min) else {
+            error!(
+                type_name = serdata.type_name(),
+                "fragchain is not ordered by offset"
+            );
+            count_discarded_sample(DiscardReason::InvalidFragchain);
+            return std::ptr::null_mut();
+        };
         if fragchain_ref.maxp1 > off {
             let payload =
                 nn_rmsg_payload_offset(fragchain_ref.rmsg, nn_rdata_payload_offset(fragchain));
             // SAFETY: CycloneDDS が渡したペイロードは min..maxp1 の範囲を含む。
-            let src = unsafe { payload.add((off - fragchain_ref.min) as usize) };
+            let src = unsafe { payload.add(frag_offset as usize) };
             let n_bytes = fragchain_ref.maxp1 - off;
             // SAFETY: src から n_bytes は直後に Vec へコピーするまで有効である。
             sg_list.push(unsafe { std::slice::from_raw_parts(src, n_bytes as usize) });
             off = fragchain_ref.maxp1;
-            assert!(off as usize <= size);
+            if off as usize > size {
+                error!(
+                    type_name = serdata.type_name(),
+                    off, size, "fragchain exceeds size"
+                );
+                count_discarded_sample(DiscardReason::InvalidFragchain);
+                return std::ptr::null_mut();
+            }
         }
         fragchain = fragchain_ref.nextfrag;
     }
 
     // make a reader out of the sg_list
     let reader = SGReader::new(&sg_list);
-    serdata.cdr = Some(
-        reader
-            .into_vec(size)
-            .expect("Failed to read fragchain into vec"),
-    );
+    let cdr = match reader.into_vec(size) {
+        Ok(cdr) => cdr,
+        Err(e) => {
+            error!(
+                type_name = serdata.type_name(),
+                "Failed to read fragchain into vec: {e}"
+            );
+            count_discarded_sample(DiscardReason::CdrAssemblyFailed);
+            return std::ptr::null_mut();
+        }
+    };
+    serdata.cdr = Some(cdr);
 
     let ptr = Box::into_raw(serdata);
     ptr as *mut ddsi_serdata
@@ -531,7 +561,15 @@ unsafe extern "C" fn serdata_from_ser_iov<T>(
 
     // make a reader out of the sg_list
     let reader = SGReader::new(&iov_slices);
-    serdata.cdr = Some(reader.into_vec(size).expect("Failed to read iov"));
+    let cdr = match reader.into_vec(size) {
+        Ok(cdr) => cdr,
+        Err(e) => {
+            error!(type_name = serdata.type_name(), "Failed to read iov: {e}");
+            count_discarded_sample(DiscardReason::CdrAssemblyFailed);
+            return std::ptr::null_mut();
+        }
+    };
+    serdata.cdr = Some(cdr);
 
     let ptr = Box::into_raw(serdata);
     ptr as *mut ddsi_serdata
@@ -1017,7 +1055,7 @@ mod tests {
     use super::*;
     use crate::{
         DdsParticipant, DdsPublisher, DdsTopic, Sample,
-        common::tests::TestTypeAlloc,
+        common::{TestDomain, tests::TestTypeAlloc},
         sertype::{
             SerType,
             tests::{IoxChunk, SerTypeOps, Writer},
@@ -1101,6 +1139,32 @@ mod tests {
                 self.ops().to_ser_unref.unwrap()(serdata_ref, &iov);
 
                 SerData::from_raw(res)
+            }
+        }
+
+        fn serdata_from_ser_iov_sized(
+            &self,
+            serdata: &SerData<T>,
+            size: usize,
+        ) -> *mut ddsi_serdata {
+            unsafe {
+                let serialized_size = self.get_size(serdata);
+                let mut iov: cyclonedds_sys::iovec = MaybeUninit::zeroed().assume_init();
+                let serdata_ref = self.ops().to_ser_ref.unwrap()(
+                    serdata.as_ptr(),
+                    0,
+                    serialized_size as usize,
+                    &mut iov,
+                );
+                let result = self.ops().from_ser_iov.unwrap()(
+                    self.sertype_ptr(),
+                    SDK_DATA,
+                    1,
+                    &iov as *const cyclonedds_sys::iovec,
+                    size,
+                );
+                self.ops().to_ser_unref.unwrap()(serdata_ref, &iov);
+                result
             }
         }
 
@@ -1189,12 +1253,42 @@ mod tests {
         Ok(())
     }
 
+    // Why: 破棄したサンプルはDDSのステータスに現れず、統計だけが検知手段になる。
+    // Method: 実体より大きいsizeでCDR組み立てを失敗させ、NULLと破棄件数を比較する。
+    #[test_log::test]
+    fn test_discarded_sample_is_counted() -> anyhow::Result<()> {
+        let tp: Box<SerType<TestTypeAlloc>> = SerType::<TestTypeAlloc>::new();
+        let ops = SerDataOps::new(&tp);
+        let sample = Sample::from(TestTypeAlloc::samples(1).next().unwrap());
+        let serdata = ops.serdata_from_sample(&sample);
+        let invalid_size = ops.get_size(&serdata) as usize + 1;
+
+        let before = crate::stats::discarded_samples();
+        assert!(
+            ops.serdata_from_ser_iov_sized(&serdata, invalid_size)
+                .is_null()
+        );
+        let after = crate::stats::discarded_samples();
+
+        let expected = crate::stats::DiscardedSamples {
+            invalid_fragchain: 0,
+            cdr_assembly_failed: 1,
+        };
+        let actual = crate::stats::DiscardedSamples {
+            invalid_fragchain: after.invalid_fragchain - before.invalid_fragchain,
+            cdr_assembly_failed: after.cdr_assembly_failed - before.cdr_assembly_failed,
+        };
+        assert_eq!(expected, actual);
+        Ok(())
+    }
+
     // Shm指定があるケースではiox_chunkを使った送受信を行う
     #[test_log::test]
     #[ignore = "Iceoryx依存"]
     fn test_serdata_ops_iox() -> anyhow::Result<()> {
-        let _domain = crate::common::tests::create_shm_domain(4)?;
-        let p = DdsParticipant::create(Some(4), None, None)?;
+        let domain_id = TestDomain::SerdataOpsIox.id();
+        let _domain = crate::common::tests::create_shm_domain(domain_id)?;
+        let p = unsafe { DdsParticipant::create(Some(domain_id), None, None)? };
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serdata_ops_iox", None, None)?;
         let w = Writer::create(&pubb, topic)?;

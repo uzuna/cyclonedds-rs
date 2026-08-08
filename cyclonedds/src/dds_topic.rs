@@ -22,6 +22,8 @@ use crate::{
 use std::convert::From;
 use std::ffi::CString;
 use std::marker::PhantomData;
+use std::sync::Arc;
+use tracing::error;
 
 use crate::serdes::TopicType;
 pub use cyclonedds_sys::{DDSError, DdsEntity, ddsi_sertype};
@@ -93,17 +95,34 @@ where
 ///
 /// 一部の目的のために受信時のデシリアライズ処理を省略した`Untyped`型を利用したトピックも作成可能
 pub struct DdsTopic<T> {
-    p: DdsEntity,
+    inner: Arc<TopicInner>,
     _marker: PhantomData<T>,
-    _maybe_listener: Option<DdsListener>,
+}
+
+struct TopicInner {
+    entity: DdsEntity,
+    _listener: Option<DdsListener>,
+}
+
+impl Drop for TopicInner {
+    fn drop(&mut self) {
+        unsafe {
+            let ret: DDSError = cyclonedds_sys::dds_delete(self.entity.entity()).into();
+            if DDSError::DdsOk != ret {
+                error!("cannot delete Topic: {}", ret);
+            }
+        }
+    }
 }
 
 impl<T> DdsTopic<T> {
     fn new(p: DdsEntity, maybe_listener: Option<DdsListener>) -> Self {
         DdsTopic {
-            p,
+            inner: Arc::new(TopicInner {
+                entity: p,
+                _listener: maybe_listener,
+            }),
             _marker: PhantomData,
-            _maybe_listener: maybe_listener,
         }
     }
 
@@ -181,13 +200,16 @@ where
 
 impl<T> Entity for DdsTopic<T> {
     fn entity(&self) -> &DdsEntity {
-        &self.p
+        &self.inner.entity
     }
 }
 
 impl<T> Clone for DdsTopic<T> {
     fn clone(&self) -> Self {
-        Self::new(self.p.clone(), self._maybe_listener.clone())
+        Self {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -195,9 +217,9 @@ impl<T> Clone for DdsTopic<T> {
 mod test {
     use super::*;
     use crate::SampleBuffer;
-    use crate::common::tests::create_loopback_domain;
+    use crate::common::{TestDomain, tests::create_loopback_domain};
     use crate::{DdsPublisher, DdsWriter};
-    use cyclonedds_derive::Topic;
+    use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
 
@@ -221,8 +243,9 @@ mod test {
             String::from("prefix/dds_topic/test/test_topic_creation/MyTopic")
         );
 
-        let _domain = create_loopback_domain(20).unwrap();
-        let participant = DdsParticipant::create(Some(20), None, None).unwrap();
+        let domain_id = TestDomain::TopicCreation.id();
+        let _domain = create_loopback_domain(domain_id).unwrap();
+        let participant = DdsParticipant::get_or_create(Some(domain_id)).unwrap();
         let topic = MyTopic::create_topic(&participant, None, None, None).unwrap();
         let publisher =
             DdsPublisher::create(&participant, None, None).expect("Unable to create publisher");
