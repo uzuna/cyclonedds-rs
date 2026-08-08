@@ -39,6 +39,7 @@ pub(crate) mod serdata;
 pub mod serdes;
 pub(crate) mod sertype;
 mod shared_registry;
+pub mod stats;
 pub mod untyped;
 pub(crate) mod util;
 
@@ -57,6 +58,7 @@ pub use interface_gen::{
     DefRegistry, InterfaceDef, InterfaceElem, InterfaceRef, MsgDefRegistry, NsMode,
 };
 pub use serdes::{FixedTopicType, Sample, SampleBuffer, TopicType};
+pub use stats::{DiscardedSamples, discarded_samples};
 
 pub use cdr;
 pub use cyclonedds_sys::dds_error::DDSError;

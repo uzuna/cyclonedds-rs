@@ -21,7 +21,12 @@ use cyclonedds_sys::{
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::{error, trace, warn};
 
-use crate::{Sample, TopicType, sertype::SerType, util::SGReader};
+use crate::{
+    Sample, TopicType,
+    sertype::SerType,
+    stats::{DiscardReason, count_discarded_sample},
+    util::SGReader,
+};
 
 /// キー値のハッシュを保持する列挙型
 /// 仕様はDDSIエンコーディング仕様書に従う
@@ -473,6 +478,7 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
 
     if fragchain_ref.min != 0 || fragchain_ref.maxp1 < off {
         error!(type_name = serdata.type_name(), "invalid fragchain bounds");
+        count_discarded_sample(DiscardReason::InvalidFragchain);
         return std::ptr::null_mut();
     }
 
@@ -496,6 +502,7 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
                     type_name = serdata.type_name(),
                     off, size, "fragchain exceeds size"
                 );
+                count_discarded_sample(DiscardReason::InvalidFragchain);
                 return std::ptr::null_mut();
             }
         }
@@ -511,6 +518,7 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
                 type_name = serdata.type_name(),
                 "Failed to read fragchain into vec: {e}"
             );
+            count_discarded_sample(DiscardReason::CdrAssemblyFailed);
             return std::ptr::null_mut();
         }
     };
@@ -549,6 +557,7 @@ unsafe extern "C" fn serdata_from_ser_iov<T>(
         Ok(cdr) => cdr,
         Err(e) => {
             error!(type_name = serdata.type_name(), "Failed to read iov: {e}");
+            count_discarded_sample(DiscardReason::CdrAssemblyFailed);
             return std::ptr::null_mut();
         }
     };
