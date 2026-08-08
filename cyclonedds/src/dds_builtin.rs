@@ -390,6 +390,10 @@ where
     ) -> Result<usize, DDSError> {
         c.return_loan();
 
+        if c.max == 0 {
+            return Err(DDSError::BadParameter);
+        }
+
         let ret = unsafe {
             let len = c.max as usize;
             if take {

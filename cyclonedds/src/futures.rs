@@ -37,7 +37,7 @@ where
 
             match readn_from_entity_now() {
                 Ok(len) => Poll::Ready(Ok(len)),
-                Err(DDSError::NoData) | Err(DDSError::OutOfResources) => {
+                Err(DDSError::NoData) => {
                     // データがない場合は次のデータが来るまで待つ
                     waker.0.register(ctx.waker());
                     Poll::Pending

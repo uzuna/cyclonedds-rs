@@ -273,6 +273,11 @@ impl<'a, T> SampleBuffer<T> {
         self.sample_info[index].valid_data
     }
 
+    /// 保持している有効なサンプル数(直前の読み出しで得られた件数)
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
     pub fn len(&self) -> usize {
         self.buffer.len()
     }
@@ -283,7 +288,10 @@ impl<'a, T> SampleBuffer<T> {
 
     /// 有効なサンプルを得る(デシリアライズデータ)
     pub fn iter(&'a self) -> impl Iterator<Item = &'a T> {
-        self.buffer.iter().filter_map(|sample| sample.try_deref())
+        self.buffer
+            .iter()
+            .take(self.size)
+            .filter_map(|sample| sample.try_deref())
     }
 
     /// 有効なサンプル(デシリアライズデータ)とその送受信情報を得る
@@ -325,13 +333,15 @@ impl<'a, T> SampleBuffer<T> {
     }
 
     pub fn clear(&mut self) {
+        self.size = 0;
         for sample in &mut self.buffer {
             sample.free_contents();
         }
     }
 
-    pub fn capacity(&self) -> usize {
-        self.buffer.capacity()
+    pub(crate) fn begin_read(&mut self) -> usize {
+        self.size = 0;
+        self.buffer.len()
     }
 }
 

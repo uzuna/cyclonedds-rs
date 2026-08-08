@@ -150,7 +150,7 @@ impl<T> DdsReader<T> {
                     .map_or(std::ptr::null(), |l| l.into()),
             );
 
-            if w >= 0 {
+            if w > 0 {
                 Ok(DdsReader {
                     inner: Arc::new(Inner::new(DdsEntity::new(w), maybe_listener, reader_type)),
                 })
@@ -184,7 +184,10 @@ impl<T> DdsReader<T> {
             DDS_ALIVE_INSTANCE_STATE, DDS_ANY_SAMPLE_STATE, DDS_ANY_VIEW_STATE,
             DDS_NOT_READ_SAMPLE_STATE, dds_readcdr, dds_takecdr,
         };
-        let maxs = buf.capacity();
+        let maxs = buf.begin_read();
+        if maxs == 0 {
+            return Err(DDSError::BadParameter);
+        }
         // dds_readcdr/dds_takecdrの場合は内部で`to_sample`が呼び出されないため、SerDataで受信を行う
         let mut data = Box::<[*mut ddsi_serdata]>::new_uninit_slice(maxs);
         let data_ptr = data.as_mut_ptr().cast();
@@ -276,6 +279,10 @@ where
         buf: &mut SampleBuffer<T>,
         take: bool,
     ) -> Result<usize, DDSError> {
+        let maxs = buf.begin_read();
+        if maxs == 0 {
+            return Err(DDSError::BadParameter);
+        }
         let (mut data, info_ptr) = buf.as_mut_recv_ptr();
         let data_ptr = data.as_mut_ptr().cast();
 
@@ -285,16 +292,16 @@ where
                     entity.entity(),
                     data_ptr,
                     info_ptr as *mut _,
-                    buf.len(),
-                    buf.len() as u32,
+                    maxs,
+                    maxs as u32,
                 )
             } else {
                 dds_read(
                     entity.entity(),
                     data_ptr,
                     info_ptr as *mut _,
-                    buf.len(),
-                    buf.len() as u32,
+                    maxs,
+                    maxs as u32,
                 )
             }
         };
