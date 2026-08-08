@@ -1142,6 +1142,32 @@ mod tests {
             }
         }
 
+        fn serdata_from_ser_iov_sized(
+            &self,
+            serdata: &SerData<T>,
+            size: usize,
+        ) -> *mut ddsi_serdata {
+            unsafe {
+                let serialized_size = self.get_size(serdata);
+                let mut iov: cyclonedds_sys::iovec = MaybeUninit::zeroed().assume_init();
+                let serdata_ref = self.ops().to_ser_ref.unwrap()(
+                    serdata.as_ptr(),
+                    0,
+                    serialized_size as usize,
+                    &mut iov,
+                );
+                let result = self.ops().from_ser_iov.unwrap()(
+                    self.sertype_ptr(),
+                    SDK_DATA,
+                    1,
+                    &iov as *const cyclonedds_sys::iovec,
+                    size,
+                );
+                self.ops().to_ser_unref.unwrap()(serdata_ref, &iov);
+                result
+            }
+        }
+
         // ops->from_iox_bufferを呼び出す
         fn serdata_from_iox_buffer(&self, buffer: &IoxChunk<'_, T>) -> Option<Box<SerData<T>>> {
             unsafe {
@@ -1224,6 +1250,35 @@ mod tests {
             assert!(ops.to_sample(&recv, &mut act));
             assert_eq!(expect.get_expected().as_ref(), act.try_deref().unwrap());
         }
+        Ok(())
+    }
+
+    // Why: 破棄したサンプルはDDSのステータスに現れず、統計だけが検知手段になる。
+    // Method: 実体より大きいsizeでCDR組み立てを失敗させ、NULLと破棄件数を比較する。
+    #[test_log::test]
+    fn test_discarded_sample_is_counted() -> anyhow::Result<()> {
+        let tp: Box<SerType<TestTypeAlloc>> = SerType::<TestTypeAlloc>::new();
+        let ops = SerDataOps::new(&tp);
+        let sample = Sample::from(TestTypeAlloc::samples(1).next().unwrap());
+        let serdata = ops.serdata_from_sample(&sample);
+        let invalid_size = ops.get_size(&serdata) as usize + 1;
+
+        let before = crate::stats::discarded_samples();
+        assert!(
+            ops.serdata_from_ser_iov_sized(&serdata, invalid_size)
+                .is_null()
+        );
+        let after = crate::stats::discarded_samples();
+
+        let expected = crate::stats::DiscardedSamples {
+            invalid_fragchain: 0,
+            cdr_assembly_failed: 1,
+        };
+        let actual = crate::stats::DiscardedSamples {
+            invalid_fragchain: after.invalid_fragchain - before.invalid_fragchain,
+            cdr_assembly_failed: after.cdr_assembly_failed - before.cdr_assembly_failed,
+        };
+        assert_eq!(expected, actual);
         Ok(())
     }
 
