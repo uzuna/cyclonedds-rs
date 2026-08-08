@@ -128,7 +128,6 @@ where
     }
 }
 
-#[derive(Clone)]
 pub struct DdsWriter<T> {
     p: DdsEntity,
     _topic: DdsTopic<T>,
