@@ -3,6 +3,62 @@
 公開APIの互換性を壊す変更を、バージョンごとに記録する。
 移行に必要な書き換えを載せることを目的とし、機能追加は対象としない。
 
+## 0.14.0
+
+### 1. `Durability::TransientLocal` が同期件数を持つようになった
+
+```rust
+// Before
+Durability::TransientLocal
+
+// After
+Durability::TransientLocal { sync_depth: NonZeroU16 }
+```
+
+`Policy::to_qos()` が `DURABILITY_SERVICE` を設定していなかったため、
+`Policy::create_transient_local(3, None)` としても**あとから参加したreaderには
+直近1件しか届かなかった**。CycloneDDSでは同期件数を決めるのは `DURABILITY_SERVICE` で、
+`HISTORY` はマッチ成立後の再送バッファにしか効かない。設定しないとDDS既定の
+`KEEP_LAST(1)` が残る。詳細は [receiving-samples.md](receiving-samples.md) を参照。
+
+`sync_depth` を `History` から導出しないのは、`History::KeepAll` が同期件数の
+無制限(`tldepth = 0`)を意味してしまい、**全readerがackしてもwriter側の履歴が
+解放されない**状態を作れるため。`NonZeroU16` で「0件」と「無制限」の両方を
+構築不能にしている。
+
+`Policy::create_transient_local(history, deadline)` のシグネチャは変わらない
+(`history` から `sync_depth` を導出する)。ただし `NonZeroU16` に収まらない値は
+`DDSError::BadParameter` になる。`Durability` を直接構築している箇所は書き換えが必要。
+
+### 2. `DdsQos::durability_service()` を追加した
+
+```rust
+pub fn durability_service(&self) -> Option<(dds_history_kind, i32)>
+```
+
+未設定時に `None` を返す。DDS既定の `KEEP_LAST(1)` で代替しないのは、
+「未設定」と「明示的に `KEEP_LAST(1)` を設定した」を呼び出し側が区別できなくなるため。
+0.13.0 で `Option` 化した他のgetterと規約を揃えている。
+
+なお `Policy::from(&DdsQos)` は未設定を `sync_depth: 1`(DDS既定と同義)、
+`KEEP_ALL` と `NonZeroU16` 超過を `NonZeroU16::MAX` に丸める。`KEEP_LAST`で
+`depth <= 0`(他ベンダ/不正なdiscoveryデータでのみ起こりうる)は「無制限」ではなく
+不正値のため、`NonZeroU16::MAX` ではなく未設定と同じ `1` に丸める。
+
+### 3. `to_qos()` が `DURABILITY_SERVICE` を設定するようになったことによる共有メモリへの影響
+
+上記1の修正で `Policy::create_transient_local(17)` のように iceoryx の既定深さ上限
+(16件、`vendor/iceoryx/iceoryx_posh/cmake/IceoryxPoshDeployment.cmake:56`)を超える
+`sync_depth` を渡すと、`to_qos()` が `DURABILITY_SERVICE` に同じ深さを設定する。
+
+0.13.0までは `DURABILITY_SERVICE` が未設定のままだったため、cyclonedds側の
+`dds_writer_supports_shm`(`vendor/cyclonedds/src/core/ddsc/src/dds_writer.c:332-337`)
+が見る深さは常にDDS既定の `KEEP_LAST(1)` で、iceoryxの上限チェックには絶対に
+引っかからなかった。0.14.0では**コードを変更していない既存のwriterでも**、
+この上限を超える設定であれば共有メモリのゼロコピー経路を失う(通信自体は
+ネットワーク経由にフォールバックするため失敗はしない)。詳細は
+[receiving-samples.md](receiving-samples.md) を参照。
+
 ## 0.13.0
 
 ### 1. `DdsQos` のQoS取得系が `Option` を返すようになった
