@@ -108,7 +108,7 @@ impl Drop for TopicInner {
     fn drop(&mut self) {
         unsafe {
             let ret: DDSError = cyclonedds_sys::dds_delete(self.entity.entity()).into();
-            if DDSError::DdsOk != ret && DDSError::AlreadyDeleted != ret {
+            if DDSError::DdsOk != ret {
                 error!("cannot delete Topic: {}", ret);
             }
         }

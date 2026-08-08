@@ -19,6 +19,7 @@ use crate::{DdsReadable, DdsWritable, Entity, dds_listener::DdsListener, dds_qos
 pub use cyclonedds_sys::{DDSError, DdsDomainId, DdsEntity};
 use std::convert::From;
 use std::sync::LazyLock;
+use tracing::error;
 
 /// `dds_create_participant`にドメイン指定なしを伝える値(`DDS_DOMAIN_DEFAULT`)
 const DDS_DOMAIN_DEFAULT: DdsDomainId = 0xFFFF_FFFF;
@@ -222,9 +223,8 @@ impl Drop for DdsParticipant {
         unsafe {
             let ret: DDSError = cyclonedds_sys::dds_delete(self.0.entity()).into();
             if DDSError::DdsOk != ret {
-                panic!("cannot delete participant: {}", ret);
-            } else {
-                //println!("Participant dropped");
+                // Dropはpanicのunwind中にも実行されるため、失敗は記録に留める。
+                error!("Ignoring dds_delete failure for DdsParticipant: {}", ret);
             }
         }
     }
