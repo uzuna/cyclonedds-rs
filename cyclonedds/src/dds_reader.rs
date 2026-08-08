@@ -24,7 +24,9 @@ pub use cyclonedds_sys::{DdsDomainId, DdsEntity};
 
 use crate::futures::{ReaderType, data_reader_listener};
 use crate::serdes::{SampleBuffer, TopicType};
-use crate::{DdsReadable, Entity, dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic};
+use crate::{
+    DdsReadable, Entity, Keepalive, dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic,
+};
 
 /// Builder structure for reader
 pub struct ReaderBuilder<T: TopicType> {
@@ -100,6 +102,7 @@ where
 struct Inner<T> {
     entity: DdsEntity,
     _topic: DdsTopic<T>,
+    _parent: Keepalive,
     _listener: Option<DdsListener>,
     reader_type: ReaderType,
 }
@@ -108,12 +111,14 @@ impl<T> Inner<T> {
     fn new(
         entity: DdsEntity,
         topic: DdsTopic<T>,
+        parent: Keepalive,
         maybe_listener: Option<DdsListener>,
         reader_type: ReaderType,
     ) -> Self {
         Inner {
             entity,
             _topic: topic,
+            _parent: parent,
             _listener: maybe_listener,
             reader_type,
         }
@@ -156,6 +161,7 @@ impl<T> DdsReader<T> {
                     inner: Arc::new(Inner::new(
                         DdsEntity::new(w),
                         topic,
+                        entity.keepalive(),
                         maybe_listener,
                         reader_type,
                     )),

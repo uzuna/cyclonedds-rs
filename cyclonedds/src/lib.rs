@@ -43,7 +43,7 @@ pub mod stats;
 pub mod untyped;
 pub(crate) mod util;
 
-pub use common::{DdsReadable, DdsWritable, Entity};
+pub use common::{DdsReadable, DdsWritable, Entity, Keepalive};
 pub use dds_api::*;
 pub use dds_listener::{DdsListener, DdsListenerBuilder};
 pub use dds_participant::{DdsParticipant, ParticipantBuilder};

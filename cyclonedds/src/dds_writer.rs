@@ -24,7 +24,9 @@ pub use cyclonedds_sys::DdsEntity;
 use std::marker::PhantomData;
 
 use crate::serdes::{FixedTopicType, Sample, TopicType};
-use crate::{DdsWritable, Entity, dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic};
+use crate::{
+    DdsWritable, Entity, Keepalive, dds_listener::DdsListener, dds_qos::DdsQos, dds_topic::DdsTopic,
+};
 
 pub struct WriterBuilder<T: TopicType> {
     maybe_qos: Option<DdsQos>,
@@ -131,6 +133,7 @@ where
 pub struct DdsWriter<T> {
     p: DdsEntity,
     _topic: DdsTopic<T>,
+    _parent: Keepalive,
     _maybe_listener: Option<DdsListener>,
 }
 
@@ -138,11 +141,13 @@ impl<T> DdsWriter<T> {
     fn new(
         entity: DdsEntity,
         topic: DdsTopic<T>,
+        parent: Keepalive,
         maybe_listener: Option<DdsListener>,
     ) -> DdsWriter<T> {
         DdsWriter {
             p: entity,
             _topic: topic,
+            _parent: parent,
             _maybe_listener: maybe_listener,
         }
     }
@@ -164,7 +169,12 @@ impl<T> DdsWriter<T> {
             );
 
             if w >= 0 {
-                Ok(DdsWriter::new(DdsEntity::new(w), topic, maybe_listener))
+                Ok(DdsWriter::new(
+                    DdsEntity::new(w),
+                    topic,
+                    entity.keepalive(),
+                    maybe_listener,
+                ))
             } else {
                 Err(DDSError::from(w))
             }

@@ -15,15 +15,35 @@
 */
 
 use cyclonedds_sys::DdsEntity;
+use std::any::Any;
+use std::sync::Arc;
+
+/// 親エンティティを子より長生きさせるための型消去ハンドル
+#[derive(Clone, Default)]
+pub struct Keepalive(#[allow(dead_code)] Option<Arc<dyn Any + Send + Sync>>);
+
+impl Keepalive {
+    pub(crate) fn shared<T: Any + Send + Sync>(inner: Arc<T>) -> Self {
+        Self(Some(inner))
+    }
+}
 
 /// An entity on which you can attach a DdsWriter
 pub trait DdsWritable {
     fn entity(&self) -> &DdsEntity;
+
+    fn keepalive(&self) -> Keepalive {
+        Keepalive::default()
+    }
 }
 
 /// An entity on which you can attach a DdsReader
 pub trait DdsReadable {
     fn entity(&self) -> &DdsEntity;
+
+    fn keepalive(&self) -> Keepalive {
+        Keepalive::default()
+    }
 }
 
 pub trait Entity {

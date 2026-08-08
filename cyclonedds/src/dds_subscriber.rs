@@ -14,7 +14,7 @@
     limitations under the License.
 */
 
-use crate::{DdsListener, DdsParticipant, DdsQos, DdsReadable};
+use crate::{DdsListener, DdsParticipant, DdsQos, DdsReadable, Keepalive};
 pub use cyclonedds_sys::{DDSError, DdsDomainId, DdsEntity};
 use std::convert::From;
 use std::sync::Arc;
@@ -102,5 +102,9 @@ impl DdsSubscriber {
 impl DdsReadable for DdsSubscriber {
     fn entity(&self) -> &DdsEntity {
         &self.0.entity
+    }
+
+    fn keepalive(&self) -> Keepalive {
+        Keepalive::shared(self.0.clone())
     }
 }
