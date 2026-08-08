@@ -1055,7 +1055,7 @@ mod tests {
     use super::*;
     use crate::{
         DdsParticipant, DdsPublisher, DdsTopic, Sample,
-        common::tests::TestTypeAlloc,
+        common::{TestDomain, tests::TestTypeAlloc},
         sertype::{
             SerType,
             tests::{IoxChunk, SerTypeOps, Writer},
@@ -1286,8 +1286,9 @@ mod tests {
     #[test_log::test]
     #[ignore = "Iceoryx依存"]
     fn test_serdata_ops_iox() -> anyhow::Result<()> {
-        let _domain = crate::common::tests::create_shm_domain(4)?;
-        let p = unsafe { DdsParticipant::create(Some(4), None, None)? };
+        let domain_id = TestDomain::SerdataOpsIox.id();
+        let _domain = crate::common::tests::create_shm_domain(domain_id)?;
+        let p = unsafe { DdsParticipant::create(Some(domain_id), None, None)? };
         let pubb = DdsPublisher::create(&p, None, None)?;
         let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serdata_ops_iox", None, None)?;
         let w = Writer::create(&pubb, topic)?;

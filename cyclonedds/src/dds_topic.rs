@@ -217,7 +217,7 @@ impl<T> Clone for DdsTopic<T> {
 mod test {
     use super::*;
     use crate::SampleBuffer;
-    use crate::common::tests::create_loopback_domain;
+    use crate::common::{TestDomain, tests::create_loopback_domain};
     use crate::{DdsPublisher, DdsWriter};
     use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
@@ -243,8 +243,9 @@ mod test {
             String::from("prefix/dds_topic/test/test_topic_creation/MyTopic")
         );
 
-        let _domain = create_loopback_domain(20).unwrap();
-        let participant = DdsParticipant::get_or_create(Some(20)).unwrap();
+        let domain_id = TestDomain::TopicCreation.id();
+        let _domain = create_loopback_domain(domain_id).unwrap();
+        let participant = DdsParticipant::get_or_create(Some(domain_id)).unwrap();
         let topic = MyTopic::create_topic(&participant, None, None, None).unwrap();
         let publisher =
             DdsPublisher::create(&participant, None, None).expect("Unable to create publisher");

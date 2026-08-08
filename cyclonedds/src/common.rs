@@ -71,13 +71,17 @@ pub enum TestDomain {
     BuiltinDiscoveryParticipant,
     BuiltinDiscoveryEndpoint,
     BuiltinDiscoveryUserdata,
-    UntypedShared,
+    UntypedReadSync,
     UntypedWriteSampleSrc,
     UntypedWriteSampleDest,
     WriterBuilderPriority,
     WriterNoReader,
     QosIncompatible,
     MatchedStatus,
+    UntypedOpsTeardown,
+    UntypedReadAsync,
+    UntypedVolatile,
+    UntypedTransientLocal,
 }
 
 #[cfg(test)]

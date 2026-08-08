@@ -255,51 +255,41 @@ pub(crate) fn parse_guid(guid_t: &cyclonedds_sys::dds_guid_t) -> uuid::Uuid {
 #[cfg(test)]
 mod dds_participant_tests {
     use super::*;
-
-    const DDS_PARTICIPANT_TEST_CREATE: DdsDomainId = 26;
-    const DDS_PARTICIPANT_TEST_GET_OR_CREATE: DdsDomainId = 27;
+    use crate::common::TestDomain;
 
     #[test]
     fn test_create() {
-        let _domain = crate::common::tests::create_loopback_domain(DDS_PARTICIPANT_TEST_CREATE)
+        let domain_id = TestDomain::ParticipantCreate.id();
+        let _domain = crate::common::tests::create_loopback_domain(domain_id)
             .expect("failed to create loopback domain");
         let mut qos = DdsQos::create().unwrap();
         qos.set_lifespan(std::time::Duration::from_nanos(1000));
         // SAFETY: このテストは参加者の生成/破棄ライフサイクル自体を検証するため
-        // 共有参加者を使えない。DDS_PARTICIPANT_TEST_CREATEはこのテスト専用の
+        // 共有参加者を使えない。このテスト専用の
         // ドメインIDであり、同一プロセス内でこのドメインを触る他のテストはない
-        let _participant =
-            unsafe { DdsParticipant::create(Some(DDS_PARTICIPANT_TEST_CREATE), Some(qos), None) }
-                .expect("failed to create participant");
+        let _participant = unsafe { DdsParticipant::create(Some(domain_id), Some(qos), None) }
+            .expect("failed to create participant");
     }
 
     /// 同じドメインIDへのget_or_createが常に同じインスタンスを返すことを確認する
     #[test]
     fn test_get_or_create_is_singleton() {
-        let first =
-            DdsParticipant::get_or_create(Some(DDS_PARTICIPANT_TEST_GET_OR_CREATE)).unwrap();
-        let second =
-            DdsParticipant::get_or_create(Some(DDS_PARTICIPANT_TEST_GET_OR_CREATE)).unwrap();
+        let domain_id = TestDomain::ParticipantGetOrCreate.id();
+        let first = DdsParticipant::get_or_create(Some(domain_id)).unwrap();
+        let second = DdsParticipant::get_or_create(Some(domain_id)).unwrap();
         assert!(std::ptr::eq(first, second));
         assert_eq!(first.guid(), second.guid());
-        assert_eq!(
-            first.domain_id().unwrap(),
-            DDS_PARTICIPANT_TEST_GET_OR_CREATE
-        );
+        assert_eq!(first.domain_id().unwrap(), domain_id);
     }
 
     /// 既に共有参加者がある状態でQoS/Listenerを指定すると、黙って無視せず
     /// Err(PreconditionNotMet)を返すことを確認する
     #[test]
     fn test_get_or_create_with_returns_err_for_existing_participant_with_args() {
-        let _first =
-            DdsParticipant::get_or_create(Some(DDS_PARTICIPANT_TEST_GET_OR_CREATE)).unwrap();
+        let domain_id = TestDomain::ParticipantGetOrCreate.id();
+        let _first = DdsParticipant::get_or_create(Some(domain_id)).unwrap();
         let qos = DdsQos::create().unwrap();
-        let result = DdsParticipant::get_or_create_with(
-            Some(DDS_PARTICIPANT_TEST_GET_OR_CREATE),
-            Some(qos),
-            None,
-        );
+        let result = DdsParticipant::get_or_create_with(Some(domain_id), Some(qos), None);
         assert_eq!(result.err(), Some(DDSError::PreconditionNotMet));
     }
 
@@ -310,7 +300,7 @@ mod dds_participant_tests {
         let handles = (0..THREADS)
             .map(|_| {
                 std::thread::spawn(|| {
-                    DdsParticipant::get_or_create(Some(DDS_PARTICIPANT_TEST_GET_OR_CREATE))
+                    DdsParticipant::get_or_create(Some(TestDomain::ParticipantGetOrCreate.id()))
                         .unwrap()
                         .guid()
                 })
