@@ -597,6 +597,75 @@ mod test {
         }
     }
 
+    // Why: TransientLocalのhistory深さをiceoryxの上限(既定16)より深くすると、
+    //      cycloneddsが`dds_writer_supports_shm`でゼロコピー経路を黙って無効化する。
+    //      `Policy`のdepth指定がこの境界をまたぐことを、切り替わる点ごと固定する
+    // Method: depthを振ってwriterを作り、`loan()`の成否でSHM経路の有無を観測する
+    #[test_log::test]
+    #[ignore = "requires iox-roudi to be running"]
+    fn test_transient_local_depth_switches_shm_path() {
+        #[derive(Debug, PartialEq)]
+        struct Row {
+            depth: i32,
+            /// loanできる＝そのwriterがゼロコピー経路を使える
+            can_loan: bool,
+        }
+
+        let participant = crate::common::tests::shared_participant_with_config(
+            TestDomain::WriterLoan.id(),
+            crate::common::tests::CYCLONE_SHM_CONFIG,
+        );
+        let publisher = DdsPublisher::create(participant, None, None).unwrap();
+
+        let actual = [1, 16, 17, 32]
+            .into_iter()
+            .map(|depth| {
+                let topic = TestTopic::create_topic(
+                    participant,
+                    Some(&format!("shm_depth_{depth}")),
+                    None,
+                    None,
+                )
+                .unwrap();
+                let mut writer = WriterBuilder::new()
+                    .with_qos(
+                        Policy::create_transient_local(depth, None)
+                            .unwrap()
+                            .to_qos()
+                            .unwrap(),
+                    )
+                    .create(&publisher, topic)
+                    .unwrap();
+                Row {
+                    depth,
+                    can_loan: writer.loan().is_ok(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                Row {
+                    depth: 1,
+                    can_loan: true
+                },
+                Row {
+                    depth: 16,
+                    can_loan: true
+                },
+                Row {
+                    depth: 17,
+                    can_loan: false
+                },
+                Row {
+                    depth: 32,
+                    can_loan: false
+                },
+            ]
+        );
+    }
+
     #[test]
     #[ignore = "requires iox-roudi to be running"]
     fn test_loan() {

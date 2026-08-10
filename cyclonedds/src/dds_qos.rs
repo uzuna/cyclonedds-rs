@@ -17,8 +17,10 @@
 use cyclonedds_sys::{dds_qos_t, *};
 use std::convert::From;
 use std::mem::MaybeUninit;
+use std::num::NonZeroU16;
 use std::time::Duration;
 use std::{clone::Clone, fmt::Debug};
+use tracing::warn;
 
 pub use cyclonedds_sys::{
     dds_destination_order_kind, dds_durability_kind, dds_duration_t, dds_history_kind,
@@ -314,6 +316,29 @@ impl DdsQos {
     // 戻り値を見ずに`assume_init`すると未初期化メモリを読むことになり、
     // `dds_*_kind`はrustified enumなので不正なdiscriminantの生成という即時UBになる
 
+    /// `DURABILITY_SERVICE`の履歴設定を得る(あとから参加したreaderへ同期する件数)
+    ///
+    /// 未設定の場合は`None`を返す。DDS既定の`KEEP_LAST(1)`で代替しないのは、
+    /// 「未設定」と「明示的に`KEEP_LAST(1)`を設定した」を呼び出し側が区別できなくなるため
+    pub fn durability_service(&self) -> Option<(dds_history_kind, i32)> {
+        let mut kind = MaybeUninit::<dds_history_kind>::uninit();
+        let mut depth = MaybeUninit::<i32>::uninit();
+        unsafe {
+            if !dds_qget_durability_service(
+                self.0,
+                std::ptr::null_mut(),
+                kind.as_mut_ptr(),
+                depth.as_mut_ptr(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ) {
+                return None;
+            }
+            Some((kind.assume_init(), depth.assume_init()))
+        }
+    }
+
     /// 未設定の場合は`None`を返す
     pub fn durability(&self) -> Option<dds_durability_kind> {
         let mut kind = MaybeUninit::<dds_durability_kind>::uninit();
@@ -521,7 +546,18 @@ pub enum Durability {
     #[default]
     Volatile,
     /// データをローカルに保存し、後から起動したReaderにも配信する
-    TransientLocal,
+    TransientLocal {
+        /// あとから参加したreaderへ同期する件数
+        ///
+        /// [`History`]とは別軸で、CycloneDDSでは前者を`DURABILITY_SERVICE`、後者
+        /// (マッチ成立後の再送バッファ)を`HISTORY`が決める
+        /// ([`DdsQos::set_durability_service`]を参照)。
+        ///
+        /// Why 非ゼロ有界: 0はDDSとして不正な値であり、無制限(`KEEP_ALL`)にすると
+        /// 全readerがackしてもwriter側の履歴が解放されず際限なく増える。
+        /// どちらも作れないようにして、送信側が持ち続ける量を必ず有限にする
+        sync_depth: NonZeroU16,
+    },
 }
 
 /// 通信可否に関わる重要なQoS要素のみをまとめた構造体
@@ -538,8 +574,15 @@ pub struct Policy {
 
 impl Policy {
     const SUPPORT_INSTANCES: i32 = 4;
+    /// iceoryxがpublisherごとに保持できる履歴の上限(`iox_cfg_max_publisher_history()`の既定値)
+    ///
+    /// `DURABILITY_SERVICE`の深さがこれを超えると、cycloneddsは`dds_writer_supports_shm`で
+    /// ゼロコピー経路を無効化する。エラーもログも出ないので、超えたことを利用者へ伝える必要がある
+    const IOX_MAX_PUBLISHER_HISTORY: i32 = 16;
     /// # Errors
-    /// `history`(KEEP_LASTのdepth)が0以下の場合は[`DDSError::BadParameter`]を返す
+    /// `history`(KEEP_LASTのdepth)が`1..=u16::MAX`の外、つまり0以下または`u16::MAX`超の場合は
+    /// [`DDSError::BadParameter`]を返す。上限は同期件数を載せる[`Durability::TransientLocal`]の
+    /// `sync_depth`が`NonZeroU16`であることに由来する
     pub fn create_transient_local(
         history: i32,
         deadline: Option<Duration>,
@@ -548,8 +591,21 @@ impl Policy {
         Ok(Policy {
             history: History::KeepLast(history),
             reliability: Reliability::Reliable(deadline.unwrap_or(Duration::from_millis(100))),
-            durability: Durability::TransientLocal,
+            durability: Durability::TransientLocal {
+                sync_depth: Self::sync_depth(history)?,
+            },
         })
+    }
+
+    /// `history`件をlate joinerへも同期する設定として[`Durability::TransientLocal`]に載せる
+    ///
+    /// # Errors
+    /// `NonZeroU16`に収まらない値は[`DDSError::BadParameter`]を返す
+    fn sync_depth(history: i32) -> Result<NonZeroU16, DDSError> {
+        u16::try_from(history)
+            .ok()
+            .and_then(NonZeroU16::new)
+            .ok_or(DDSError::BadParameter)
     }
 
     /// このPolicyに対応する[`DdsQos`]を組み立てる
@@ -591,8 +647,33 @@ impl Policy {
             Durability::Volatile => {
                 qos.set_durability(dds_durability_kind::DDS_DURABILITY_VOLATILE);
             }
-            Durability::TransientLocal => {
+            Durability::TransientLocal { sync_depth } => {
                 qos.set_durability(dds_durability_kind::DDS_DURABILITY_TRANSIENT_LOCAL);
+                // あとから参加したreaderへ何件同期するかを決めるのはこのQoSで、`history`は
+                // マッチ後の再送バッファにしか効かない。設定しないとDDS既定のKEEP_LAST(1)が
+                // 残り、`history`に何を指定しても1件しか届かない
+                let depth = i32::from(sync_depth.get());
+                qos.set_durability_service(
+                    Duration::ZERO,
+                    dds_history_kind::DDS_HISTORY_KEEP_LAST,
+                    depth,
+                    depth.saturating_mul(Self::SUPPORT_INSTANCES),
+                    Self::SUPPORT_INSTANCES,
+                    depth,
+                )?;
+                if cfg!(feature = "shm") && depth > Self::IOX_MAX_PUBLISHER_HISTORY {
+                    // cyclonedds側は黙ってゼロコピーを落とすだけで何も知らせないため、
+                    // `to_qos()`を呼ぶたびに残す。`to_qos()`はreader/topic用のQoS生成にも
+                    // 使われる(writer専用ではない)ため、writerに使う場合の影響として書く。
+                    // `shm`featureは既定有効なため、CycloneDDS設定側で共有メモリ自体を
+                    // 無効化している利用者にも出うるが、その設定はRust側から観測できないため許容する
+                    warn!(
+                        sync_depth = depth,
+                        limit = Self::IOX_MAX_PUBLISHER_HISTORY,
+                        "TransientLocalの同期件数がiceoryxの上限を超えるため、\
+                         このQoSをwriterに使うと共有メモリのゼロコピー経路が使われない"
+                    );
+                }
                 if self.reliability == Reliability::BestEffort {
                     // TransientLocal で BestEffort は非推奨なので Reliable に変更する
                     qos.set_reliability(
@@ -623,7 +704,24 @@ impl From<&DdsQos> for Policy {
         };
         let durability = match qos.durability() {
             Some(dds_durability_kind::DDS_DURABILITY_VOLATILE) | None => Durability::Volatile,
-            Some(_) => Durability::TransientLocal,
+            // `Durability`は無制限の同期を表現できないため、KEEP_ALLや範囲外の深さは
+            // 表現可能な最大値へ丸める。`Policy`は元から要素を絞った要約なので情報は落ちる
+            Some(_) => Durability::TransientLocal {
+                sync_depth: match qos.durability_service() {
+                    // `depth <= 0`は他ベンダや不正なdiscoveryデータ由来でしか来ないが、
+                    // 「無制限」ではなく単なる不正値なのでDDS既定の1へ倒す。
+                    // MAXへ丸めると少なすぎる値が65535件保持のwriterに化けて危険側になる
+                    Some((dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)) if depth <= 0 => {
+                        NonZeroU16::MIN
+                    }
+                    Some((dds_history_kind::DDS_HISTORY_KEEP_LAST, depth)) => {
+                        Policy::sync_depth(depth).unwrap_or(NonZeroU16::MAX)
+                    }
+                    Some((dds_history_kind::DDS_HISTORY_KEEP_ALL, _)) => NonZeroU16::MAX,
+                    // 未設定はDDS既定の`KEEP_LAST(1)`と同義であり、無制限ではない
+                    None => NonZeroU16::MIN,
+                },
+            },
         };
         Policy {
             history,
@@ -783,12 +881,97 @@ mod dds_qos_tests {
     }
 
     #[test]
-    fn test_create_transient_local_rejects_non_positive_history() {
+    fn test_create_transient_local_rejects_out_of_range_history() {
+        // 同期件数は`NonZeroU16`で表すため、0以下とu16を超える値は作れない
+        let cases = [
+            (0, Some(DDSError::BadParameter)),
+            (-1, Some(DDSError::BadParameter)),
+            (1, None),
+            (i32::from(u16::MAX), None),
+            (i32::from(u16::MAX) + 1, Some(DDSError::BadParameter)),
+        ];
+        let actual = cases
+            .iter()
+            .map(|&(history, _)| (history, Policy::create_transient_local(history, None).err()))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, cases.to_vec());
+    }
+
+    // Why: `Durability`は無制限の同期を表現できない。KEEP_ALLや`NonZeroU16`に収まらない深さを
+    //      そのまま扱うと、writer側の履歴が解放されない設定を`Policy`経由で作れてしまう。
+    //      逆に`depth <= 0`は「無制限」ではなく単なる不正値なので、MAXではなく既定の1へ倒す
+    // Method: DURABILITY_SERVICEの深さを振り、`Policy::from`が丸め先を使い分けることを確認する
+    #[test]
+    fn test_policy_from_qos_clamps_unbounded_durability_service() {
+        let transient_local_qos = |kind, depth| {
+            let mut qos = DdsQos::create().unwrap();
+            qos.set_durability(dds_durability_kind::DDS_DURABILITY_TRANSIENT_LOCAL);
+            qos.set_durability_service(Duration::ZERO, kind, depth, -1, -1, -1)
+                .unwrap();
+            qos
+        };
+        // KEEP_LASTでdepth<=0は`set_durability_service`が拒否するため、このcrateの
+        // APIでは作れない。他ベンダ/不正なdiscoveryデータ由来を模してFFIで直接設定する
+        let unvalidated_keep_last_qos = |depth| {
+            let mut qos = DdsQos::create().unwrap();
+            qos.set_durability(dds_durability_kind::DDS_DURABILITY_TRANSIENT_LOCAL);
+            unsafe {
+                dds_qset_durability_service(
+                    qos.0,
+                    0,
+                    dds_history_kind::DDS_HISTORY_KEEP_LAST,
+                    depth,
+                    -1,
+                    -1,
+                    -1,
+                );
+            }
+            qos
+        };
+        let actual = [
+            transient_local_qos(dds_history_kind::DDS_HISTORY_KEEP_LAST, 3),
+            transient_local_qos(dds_history_kind::DDS_HISTORY_KEEP_LAST, i32::MAX),
+            transient_local_qos(dds_history_kind::DDS_HISTORY_KEEP_ALL, 0),
+            unvalidated_keep_last_qos(0),
+            unvalidated_keep_last_qos(-1),
+        ]
+        .map(|qos| Policy::from(&qos).durability);
         assert_eq!(
-            Policy::create_transient_local(0, None).err(),
-            Some(DDSError::BadParameter)
+            actual,
+            [
+                Durability::TransientLocal {
+                    sync_depth: NonZeroU16::new(3).unwrap()
+                },
+                Durability::TransientLocal {
+                    sync_depth: NonZeroU16::MAX
+                },
+                Durability::TransientLocal {
+                    sync_depth: NonZeroU16::MAX
+                },
+                Durability::TransientLocal {
+                    sync_depth: NonZeroU16::MIN
+                },
+                Durability::TransientLocal {
+                    sync_depth: NonZeroU16::MIN
+                },
+            ]
         );
-        assert!(Policy::create_transient_local(1, None).is_ok());
+    }
+
+    // Why: DURABILITY_SERVICE未設定はDDS既定の`KEEP_LAST(1)`と同義で、無制限ではない。
+    //      getterを`Option`にした際にKEEP_ALLと同じ扱いへ倒すと同期件数が過大になる
+    // Method: durabilityだけ設定したQoSのsync_depthが1になることを確認する
+    #[test]
+    fn test_policy_from_qos_without_durability_service_syncs_one() {
+        let mut qos = DdsQos::create().unwrap();
+        qos.set_durability(dds_durability_kind::DDS_DURABILITY_TRANSIENT_LOCAL);
+        assert_eq!(qos.durability_service(), None);
+        assert_eq!(
+            Policy::from(&qos).durability,
+            Durability::TransientLocal {
+                sync_depth: NonZeroU16::MIN
+            }
+        );
     }
 
     #[test]

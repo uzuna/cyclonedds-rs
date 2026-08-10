@@ -1,6 +1,6 @@
 [package]
 name = "cyclonedds-rs"
-version = "0.13.0"
+version = "0.14.0"
 description = "Safe Rust bindings for cyclonedds"
 edition.workspace = true
 license-file.workspace = true
@@ -50,4 +50,8 @@ required-features = ["derive"]
 
 [[test]]
 name = "derive_hygiene"
+required-features = ["derive"]
+
+[[test]]
+name = "practical"
 required-features = ["derive"]
