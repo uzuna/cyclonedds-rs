@@ -57,9 +57,14 @@ assets = [
         "755",
     ],
     [
-        "../cyclonedds/install/share/**/*",
-        "usr/share/",
-        "755",
+        "../cyclonedds/install/lib/cmake/**/*",
+        "usr/lib/cmake/",
+        "644",
+    ],
+    [
+        "../cyclonedds/install/lib/pkgconfig/**/*",
+        "usr/lib/pkgconfig/",
+        "644",
     ],
 ]
 
