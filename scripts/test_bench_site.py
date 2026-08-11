@@ -76,13 +76,16 @@ class BenchSiteTest(unittest.TestCase):
                 self.assertIn(required, html)
             script = re.search(r"<script>\n(.*?)\n  </script>", html, re.DOTALL)
             self.assertIsNotNone(script)
-            checked = subprocess.run(
-                ["node", "--check"],
-                input=script.group(1),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            try:
+                checked = subprocess.run(
+                    ["node", "--check"],
+                    input=script.group(1),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError:
+                self.skipTest("Node.js がインストールされていません")
             self.assertEqual(checked.returncode, 0, checked.stderr)
 
     def test_local_server_serves_generated_site(self):

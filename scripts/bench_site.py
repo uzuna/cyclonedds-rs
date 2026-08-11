@@ -342,7 +342,7 @@ def write_index_html(site_dir):
       anchor.href = href;
       anchor.textContent = label;
       anchor.target = "_blank";
-      anchor.rel = "noreferrer";
+      anchor.rel = "noopener noreferrer";
       parent.append(anchor);
     };
     const shortCommit = commit => (commit || "-").slice(0, 8);
@@ -601,7 +601,7 @@ def write_index_html(site_dir):
       anchor.href = url;
       anchor.download = `${state.caseId || "benchmark"}-${state.metricKey || "data"}.json`;
       anchor.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     }
     fetch("index.json").then(response => response.json()).then(index => {
       state.runs = index.runs || [];

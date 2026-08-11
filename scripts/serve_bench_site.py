@@ -24,6 +24,13 @@ def latest_input_dir(results_root):
     return max(candidates, key=lambda path: (path / "metadata.json").stat().st_mtime, default=None)
 
 
+def server_url(address):
+    host, port = address
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{port}/"
+
+
 def serve(site_dir, host, port):
     if not (site_dir / "index.html").is_file():
         raise FileNotFoundError(
@@ -33,7 +40,7 @@ def serve(site_dir, host, port):
     handler = partial(QuietRequestHandler, directory=str(site_dir))
     server = ThreadingHTTPServer((host, port), handler)
     address = server.server_address
-    print(f"ベンチマークサイト: http://{address[0]}:{address[1]}/", flush=True)
+    print(f"ベンチマークサイト: {server_url(address)}", flush=True)
     print("終了するには Ctrl-C を押してください。", flush=True)
     try:
         server.serve_forever()
