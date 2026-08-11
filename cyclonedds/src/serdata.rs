@@ -8,15 +8,13 @@
 //! 紐付いたデータの開放はserdataのライフサイクルの中で行われる。
 //! しかしデシリアライズのタイミングや、他の保持データについては型ごとに実装する余地があるため
 //! [SerData]構造体を用意して、必要な処理を追加する
-use std::{ffi::c_void, ptr::NonNull};
+use std::ffi::c_void;
 
 use cdr::{Bounded, CdrBe, Infinite};
 use cyclonedds_sys::{
-    IOX_CHUNK_CONTAINS_RAW_DATA, SDK_DATA, SDK_KEY, ddsi_keyhash, ddsi_serdata,
-    ddsi_serdata_addref, ddsi_serdata_init, ddsi_serdata_kind, ddsi_serdata_ops,
-    ddsi_serdata_removeref, ddsi_sertype, ddsrt_md5_append, ddsrt_md5_finish, ddsrt_md5_init,
-    ddsrt_md5_state_t, free_iox_chunk, iceoryx_header_from_chunk, iovec, iox_sub_t, nn_rdata,
-    nn_rmsg,
+    SDK_DATA, SDK_KEY, dds_loaned_sample, dds_loaned_sample_removeref, ddsi_keyhash, ddsi_rdata,
+    ddsi_rmsg, ddsi_serdata, ddsi_serdata_addref, ddsi_serdata_init, ddsi_serdata_kind,
+    ddsi_serdata_ops, ddsi_serdata_removeref, ddsi_sertype, iovec,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::{error, trace, warn};
@@ -43,15 +41,12 @@ pub(crate) enum KeyHash {
     None,
     // このライブラリで計算するKeyHash。先頭にCDR Encodingのキャップが入るので20バイト
     CdrKey([u8; 20]),
-    // DDSI仕様(PID_KEY_HASH)に従うKeyHash。16バイト
-    RawKey([u8; 16]),
 }
 
 impl KeyHash {
     pub fn key_length(&self) -> usize {
         match self {
             KeyHash::CdrKey(k) => k.len(),
-            KeyHash::RawKey(k) => k.len(),
             _ => 0,
         }
     }
@@ -63,7 +58,6 @@ pub(crate) enum SampleData<T> {
     Uninitialized,
     SdkKey,
     SdkData(std::sync::Arc<T>),
-    ShmData(NonNull<T>),
 }
 
 /// CycloneDDSで取り扱うSerData構造体。
@@ -71,25 +65,15 @@ pub(crate) enum SampleData<T> {
 /// `serdata_ops`を通じてデータの処理を行うため必要な構造体
 /// `ddsi_serdata`をReferenceCounterとする共有された構造体である。
 ///
-/// serdataはUDPからのフラグチェーン、他のserdataからのバイト配列、Iceoryxの共有メモリバッファ、アプリケーションのサンプルデータから構築する
+/// serdataはUDPからのフラグチェーン、他のserdataからのバイト配列、PSMXのシリアライズ済みデータ、アプリケーションのサンプルデータから構築する
 /// このトランスポート層、アプリケーション間の相互変換実装と、それに対応するデータ保持の実装を行う
 ///
-/// 特に、通信経路を自動選択するために可能な限り遅延評価することが期待されている。
-/// プロセス内ならCDRエンコードなしにサンプルを共有するなどが可能である
-///
-/// Tには3タイプある
-/// 1. CDRエンコーディングが可能な型: 全ての型が対応するが、ネットワークの1パケットサイズを超えるデータ送受信ではコストが高い
-/// 2. メモリレイアウトが固定で、シリアライズなしで送受信できる型
-///    メモリコピーで送受信できててコストが低いが、メモリレイアウトが同じでなければならない
-/// 3. メモリアロケーションするフィールドを持ち、何らかのrepackingが必要な型
-///    CDRエンコードコストはかかるが、サイズが増えても転送コストは増えにくい
-///
-/// 1が全てを内包しているが、同マシン内ならパフォーマンス観点で2,3を選びたい。
-/// 実利用上の制約から3に限定することでロギングがしやすいメリットが生まれる。
+/// 通信経路はCyclone DDSが選択する。cyclonedds-rsはすべてのトピックをXCDR1へ
+/// シリアライズし、PSMXではそのバイト列を共有メモリで転送する。
 #[repr(C)]
 pub(crate) struct SerData<T> {
     /// CycloneDDSが使用するserdata構造体
-    /// この中ではデータハッシュ、操作関数へのポインタ、Iceoryxのチャンクを保持している
+    /// この中ではデータハッシュ、操作関数へのポインタ、貸出しサンプルを保持している
     pub serdata: ddsi_serdata,
     /// 送信時のシリアライズ前、受信時のシリアライズ後データを保持するフィールド
     pub sample: SampleData<T>,
@@ -171,14 +155,11 @@ where
 
 impl<T> Drop for SerData<T> {
     fn drop(&mut self) {
-        // Iceoryxチャンクがあれば解放する
-        if !self.serdata.iox_chunk.is_null() {
+        if !self.serdata.loan.is_null() {
             unsafe {
-                let iox_subscriber = self.serdata.iox_subscriber as *mut iox_sub_t;
-                let chunk = &mut self.serdata.iox_chunk;
-                let chunk = chunk as *mut *mut c_void;
-                free_iox_chunk(iox_subscriber, chunk);
+                dds_loaned_sample_removeref(self.serdata.loan);
             }
+            self.serdata.loan = std::ptr::null_mut();
         }
     }
 }
@@ -220,12 +201,8 @@ pub(crate) const fn create_serdata_ops_base<T>() -> ddsi_serdata_ops {
         // Tにシリアライズ/デシリアライズ実装がないため設定できない操作
         from_sample: None,
         to_sample: None,
-        get_sample_size: None,
-
-        #[cfg(feature = "shm")]
-        from_iox_buffer: Some(serdata_from_iox_buffer::<T>),
-        #[cfg(not(feature = "shm"))]
-        from_iox_buffer: None,
+        from_loaned_sample: Some(serdata_from_loaned_sample::<T>),
+        from_psmx: Some(serdata_from_psmx::<T>),
     }
 }
 
@@ -238,9 +215,6 @@ where
     ops.get_size = Some(serdata_get_size::<T>);
     ops.to_ser = Some(serdata_to_ser::<T>);
     ops.to_ser_ref = Some(serdata_to_ser_ref::<T>);
-    if cfg!(feature = "shm") {
-        ops.get_sample_size = Some(serdata_get_sample_size::<T>);
-    }
     ops
 }
 
@@ -259,26 +233,6 @@ where
 
 // CDRシリアライズされたキー情報からKeyHashを計算してserdataにセットする
 // serdata_default_get_keyhash 関数による設定と同じ
-fn compute_key_hash<T>(key_cdr: &[u8], serdata: &mut SerData<T>)
-where
-    T: TopicType,
-{
-    let mut cdr_key = [0u8; 20];
-
-    if T::force_md5_keyhash() || key_cdr.len() > 16 {
-        let mut md5st = ddsrt_md5_state_t::default();
-        let md5set = &mut md5st as *mut ddsrt_md5_state_t;
-        unsafe {
-            ddsrt_md5_init(md5set);
-            ddsrt_md5_append(md5set, key_cdr.as_ptr(), key_cdr.len() as u32);
-            ddsrt_md5_finish(md5set, cdr_key.as_mut_ptr());
-        }
-    } else {
-        cdr_key[0..key_cdr.len()].copy_from_slice(key_cdr);
-    }
-    serdata.key_hash = KeyHash::CdrKey(cdr_key)
-}
-
 // 別のserdataが参照を取得するトリガー
 // CDRシリアライズ済みデータがあるので共有する
 #[tracing::instrument(level = "trace")]
@@ -336,23 +290,6 @@ unsafe extern "C" fn serdata_to_ser_ref<T>(
 where
     T: Serialize,
 {
-    fn serialize_type<T: Serialize>(sample: &T, maybe_size: Option<u32>) -> Result<Vec<u8>, ()> {
-        if let Some(size) = maybe_size {
-            // Round up allocation to multiple of four
-            let size = (size + 3) & !3u32;
-            let mut buffer = Vec::<u8>::with_capacity(size as usize);
-            if let Ok(()) = cdr::serialize_into::<_, T, _, CdrBe>(&mut buffer, sample, Infinite) {
-                Ok(buffer)
-            } else {
-                Err(())
-            }
-        } else if let Ok(data) = cdr::serialize::<T, _, CdrBe>(sample, Infinite) {
-            Ok(data)
-        } else {
-            Err(())
-        }
-    }
-
     let serdata = SerData::<T>::mut_ref_from_serdata(serdata);
     // SAFETY: CycloneDDS はこの呼出し中に書込み可能な iov を渡し、返却後にのみ参照する。
     let iov = unsafe { &mut *iov };
@@ -364,7 +301,6 @@ where
             let (p, len) = match &serdata.key_hash {
                 KeyHash::None => (std::ptr::null(), 0),
                 KeyHash::CdrKey(k) => (k.as_ptr(), k.len()),
-                KeyHash::RawKey(k) => (k.as_ptr(), k.len()),
             };
 
             iov.iov_base = p as *mut c_void;
@@ -398,31 +334,6 @@ where
                 return std::ptr::null_mut();
             }
         }
-
-        SampleData::ShmData(sample) => {
-            if serdata.cdr.is_none() {
-                trace!("do serialization for to_ser_ref");
-                // SAFETY: SHM 経路では sample は有効な T を指す。
-                serdata.cdr = unsafe { serialize_type::<T>(sample.as_ref(), None) }.ok();
-            }
-            if let Some(cdr) = &serdata.cdr {
-                let cdr = if offset < cdr.len() {
-                    let last = (offset + size).min(cdr.len());
-                    &cdr[offset..last]
-                } else {
-                    &[]
-                };
-                iov.iov_base = if cdr.is_empty() {
-                    std::ptr::null_mut()
-                } else {
-                    cdr.as_ptr() as *mut c_void
-                };
-                iov.iov_len = cdr.len();
-            } else {
-                error!("Serialization error (SHM)!");
-                return std::ptr::null_mut();
-            }
-        }
     }
     // SAFETY: serdata は CycloneDDS が所有する有効な参照カウント対象である。
     unsafe { ddsi_serdata_addref(&serdata.serdata) }
@@ -450,7 +361,7 @@ unsafe extern "C" fn serdata_eqkey<T>(
 unsafe extern "C" fn serdata_from_fragchain<T>(
     sertype: *const ddsi_sertype,
     kind: ddsi_serdata_kind,
-    mut fragchain: *const nn_rdata,
+    mut fragchain: *const ddsi_rdata,
     size: usize,
 ) -> *mut ddsi_serdata {
     /*  These functions are created from the macros in
@@ -458,16 +369,16 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
         Bad things will happen if these macros change.
         Some discussions here: https://github.com/eclipse-cyclonedds/cyclonedds/issues/830
     */
-    fn nn_rdata_payload_offset(rdata: *const nn_rdata) -> usize {
+    fn rdata_payload_offset(rdata: *const ddsi_rdata) -> usize {
         unsafe { (*rdata).payload_zoff as usize }
     }
 
-    fn nn_rmsg_payload(rmsg: *const nn_rmsg) -> *const u8 {
+    fn rmsg_payload(rmsg: *const ddsi_rmsg) -> *const u8 {
         unsafe { rmsg.add(1) as *const u8 }
     }
 
-    fn nn_rmsg_payload_offset(rmsg: *const nn_rmsg, offset: usize) -> *const u8 {
-        unsafe { nn_rmsg_payload(rmsg).add(offset) }
+    fn rmsg_payload_offset(rmsg: *const ddsi_rmsg, offset: usize) -> *const u8 {
+        unsafe { rmsg_payload(rmsg).add(offset) }
     }
 
     let mut off: u32 = 0;
@@ -497,8 +408,7 @@ unsafe extern "C" fn serdata_from_fragchain<T>(
             return std::ptr::null_mut();
         };
         if fragchain_ref.maxp1 > off {
-            let payload =
-                nn_rmsg_payload_offset(fragchain_ref.rmsg, nn_rdata_payload_offset(fragchain));
+            let payload = rmsg_payload_offset(fragchain_ref.rmsg, rdata_payload_offset(fragchain));
             // SAFETY: CycloneDDS が渡したペイロードは min..maxp1 の範囲を含む。
             let src = unsafe { payload.add(frag_offset as usize) };
             let n_bytes = fragchain_ref.maxp1 - off;
@@ -620,7 +530,6 @@ where
             // loanなのにsampleが呼ばれるケースは、シリアライズなし転送の想定ルートに
             // シリアライズ必要な参加者が入る異常な状況なので許すべきではない
             // 一応区別する場合はheaderが読めるかでどうかが利用できる。
-            // let iox_header = iceoryx_header_from_chunk(sample);
             // let mut sample = NonNull::new_unchecked(sample as *mut T);
 
             // sampleにはSample<T>が書いてある
@@ -729,7 +638,6 @@ unsafe extern "C" fn serdata_to_ser<T>(
             // SAFETY: buf は size バイトの書込み可能な領域を指す。
             KeyHash::None => unsafe { std::ptr::write_bytes(buf, 0, size) },
             KeyHash::CdrKey(k) => copy_cdr_data(k, size, offset, buf),
-            KeyHash::RawKey(k) => copy_cdr_data(k, size, offset, buf),
         },
         // We may serialize both SDK data as well as SHM Data
         SampleData::SdkData(v) => {
@@ -737,26 +645,6 @@ unsafe extern "C" fn serdata_to_ser<T>(
             let buf_slice = unsafe { std::slice::from_raw_parts_mut(buf, size) };
             if let Err(e) =
                 cdr::serialize_into::<_, T, _, CdrBe>(buf_slice, v.as_ref(), Bounded(size as u64))
-            {
-                panic!(
-                    "Unable to serialize type {:?} due to {}",
-                    serdata.type_name(),
-                    e
-                );
-            }
-        }
-        SampleData::ShmData(v) => {
-            // SAFETY: buf は size バイトの書込み可能な領域を指す。
-            let buf_slice = unsafe { std::slice::from_raw_parts_mut(buf, size) };
-            if let Err(e) =
-                // SAFETY: SHM 経路では v は有効な T を指す。
-                unsafe {
-                    cdr::serialize_into::<_, T, _, CdrBe>(
-                        buf_slice,
-                        v.as_ref(),
-                        Bounded(size as u64),
-                    )
-                }
             {
                 panic!(
                     "Unable to serialize type {:?} due to {}",
@@ -860,7 +748,6 @@ unsafe extern "C" fn serdata_get_keyhash<T>(
     let src = match &serdata.key_hash {
         KeyHash::None => &[],
         KeyHash::CdrKey(k) => &k[4..],
-        KeyHash::RawKey(k) => &k[..],
     };
     if !src.is_empty() {
         keyhash.value.copy_from_slice(src);
@@ -892,24 +779,10 @@ where
             }
             cdr::calc_serialized_size::<T>(sample) as u32
         }
-        // SampleData::ShmData(sample) => cdr::calc_serialized_size::<T>(sample.as_ref()) as u32,
         _ => 0,
     };
     trace!(type_name = serdata.type_name(), size);
     size
-}
-
-// Iceoryxの共有メモリバッファのサイズを返す
-// ddsi_serdata_iox_size
-#[cfg(feature = "shm")]
-#[tracing::instrument(level = "trace")]
-unsafe extern "C" fn serdata_get_sample_size<T>(serdata: *const ddsi_serdata) -> u32
-where
-    T: Serialize,
-{
-    let serdata = SerData::<T>::const_ref_from_serdata(serdata);
-    // SAFETY: type_ は serdata に対応する初期化済み ddsi_sertype を指す。
-    unsafe { (*serdata.serdata.type_).iox_size }
 }
 
 // 受信したserdataからサンプルを復元する
@@ -934,116 +807,79 @@ where
     // 外部から到来したメッセージで、デシリアライズ未了の場合の分岐
     // デシリアライズしたならserdata.sampleがUninitializedではなくなる
     if let SampleData::Uninitialized = serdata.sample {
-        // ioxが有効で、iox_chunkがセットされている場合はiox_chunkからデシリアライズする
-        if cfg!(feature = "shm") && !serdata.serdata.iox_chunk.is_null() {
-            // SAFETY: iox_chunk は CycloneDDS が所有する有効な Iceoryx chunk を指す。
-            let size = unsafe {
-                let iox_header = iceoryx_header_from_chunk(serdata.serdata.iox_chunk);
-                (*iox_header).data_size as usize
-            };
-            let buf =
-                unsafe { std::slice::from_raw_parts(serdata.serdata.iox_chunk as *const u8, size) };
-
-            // ioxサンプルをデシリアライズしたら複数回呼ばれた場合に備えてsampleに記録する
-            match cdr::deserialize_from::<_, T, _>(buf, Bounded(size as u64)) {
-                Ok(decoded) => {
-                    if T::has_key() {
-                        // compute the 16byte key hash
-                        let key_cdr = decoded.key_cdr();
-                        // skip the four byte header
-                        let key_cdr = &key_cdr[4..];
-                        compute_key_hash(key_cdr, serdata);
-                    }
-                    let sample = std::sync::Arc::new(decoded);
-                    serdata.sample = SampleData::SdkData(sample);
-                }
-                Err(e) => {
-                    warn!(type_name = serdata.type_name(), sample.serdata = ?s.serdata, serdata.serdata = ?serdata.as_ptr(), error = %e,"Deserialization error!");
-                    return false;
-                }
+        let Some(cdr) = &serdata.cdr else {
+            warn!(type_name = serdata.type_name(), sample.serdata = ?s.serdata, serdata.serdata = ?serdata.as_ptr(), "CDR data is missing!");
+            return false;
+        };
+        let size = cdr.len();
+        match cdr::deserialize_from::<_, T, _>(cdr.as_slice(), Bounded(size as u64)) {
+            Ok(decoded) => {
+                let sample = std::sync::Arc::new(decoded);
+                serdata.sample = SampleData::SdkData(sample);
             }
-        } else {
-            // ioxが無効もしくは未設定ならCDRにデータがなければならない
-            if serdata.cdr.is_none() {
-                warn!(type_name = serdata.type_name(), sample.serdata = ?s.serdata, serdata.serdata = ?serdata.as_ptr(),"CDR data is missing!");
+            Err(e) => {
+                warn!(type_name = serdata.type_name(), sample.serdata = ?s.serdata, serdata.serdata = ?serdata.as_ptr(), error = %e,"Deserialization error!");
                 return false;
-            }
-            if let Some(cdr) = &serdata.cdr {
-                let size = cdr.len();
-                match cdr::deserialize_from::<_, T, _>(cdr.as_slice(), Bounded(size as u64)) {
-                    Ok(decoded) => {
-                        let sample = std::sync::Arc::new(decoded);
-                        serdata.sample = SampleData::SdkData(sample);
-                    }
-                    Err(e) => {
-                        warn!(type_name = serdata.type_name(), sample.serdata = ?s.serdata, serdata.serdata = ?serdata.as_ptr(), error = %e,"Deserialization error!");
-                        return false;
-                    }
-                }
             }
         }
     }
 
     // 有効な受信データの場合はサンプルに関連付ける
-    match &serdata.sample {
-        SampleData::SdkData(_) | SampleData::ShmData(_) => {
-            s.set_serdata(serdata_ptr as *mut ddsi_serdata);
-        }
-        _ => {}
+    if let SampleData::SdkData(_) = &serdata.sample {
+        s.set_serdata(serdata_ptr as *mut ddsi_serdata);
     }
 
     true
 }
 
-// Iceoryxで確保したバッファを紐付けて、アプリケーションが読み出せる状態にする
-// iox_chunkにはそのまま、もしくはcdrシリアライズされたデータが入っている
-// headerにフラグがあって区別ができる
 #[tracing::instrument(level = "trace")]
-unsafe extern "C" fn serdata_from_iox_buffer<T>(
-    sertype: *const ddsi_sertype,
-    kind: ddsi_serdata_kind,
-    sub: *mut ::std::os::raw::c_void,
-    buffer: *mut ::std::os::raw::c_void,
+unsafe extern "C" fn serdata_from_loaned_sample<T>(
+    _sertype: *const ddsi_sertype,
+    _kind: ddsi_serdata_kind,
+    _sample: *const ::std::os::raw::c_char,
+    _loaned_sample: *mut dds_loaned_sample,
+    _will_require_cdr: bool,
 ) -> *mut ddsi_serdata {
-    if sertype.is_null() {
-        trace!("sertype is null");
-        return std::ptr::null_mut();
-    }
-    if buffer.is_null() {
-        trace!("iox buffer is null");
-        return std::ptr::null_mut();
-    }
-    let mut d = SerData::<T>::new(sertype, kind);
+    // RustのSample<T>はRAW貸出し形式と互換ではないため、所有権を引き受けない。
+    let _ = std::marker::PhantomData::<T>;
+    std::ptr::null_mut()
+}
 
-    // iox_chunkはserdataに渡して管理を任せる
-    d.serdata.iox_chunk = buffer;
-    // SAFETY: buffer は CycloneDDS が渡した適切に整列された Iceoryx chunk を指す。
-    let iox_header = unsafe { iceoryx_header_from_chunk(buffer) };
-    // SAFETY: iox_header は上記 chunk の有効なヘッダを指す。
-    let (data_size, shm_data_state, keyhash) = unsafe {
-        (
-            (*iox_header).data_size,
-            (*iox_header).shm_data_state,
-            (*iox_header).keyhash.value,
-        )
+#[tracing::instrument(level = "trace")]
+unsafe extern "C" fn serdata_from_psmx<T>(
+    sertype: *const ddsi_sertype,
+    loaned_sample: *mut dds_loaned_sample,
+) -> *mut ddsi_serdata {
+    use cyclonedds_sys::{
+        DDS_LOANED_SAMPLE_STATE_SERIALIZED_DATA, DDS_LOANED_SAMPLE_STATE_SERIALIZED_KEY,
     };
-    trace!(type_name = d.type_name(), serdata = ?d.as_ptr(), size = data_size, state = shm_data_state);
 
-    // サブスクライバがいる場合は紐付けとkey_hashのコピーを行う
-    if !sub.is_null() {
-        d.serdata.iox_subscriber = sub;
-        d.key_hash = KeyHash::RawKey(keyhash);
+    if sertype.is_null() || loaned_sample.is_null() {
+        return std::ptr::null_mut();
+    }
+    let loan = unsafe { &*loaned_sample };
+    if loan.metadata.is_null() || loan.sample_ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let metadata = unsafe { &*loan.metadata };
+    let kind = match metadata.sample_state {
+        DDS_LOANED_SAMPLE_STATE_SERIALIZED_DATA => SDK_DATA,
+        DDS_LOANED_SAMPLE_STATE_SERIALIZED_KEY => SDK_KEY,
+        _ => return std::ptr::null_mut(),
+    };
+    // cyclonedds-rsはXCDR1 big-endianだけを読み書きする。
+    if metadata.cdr_identifier != 0 || metadata.cdr_options != 0 {
+        return std::ptr::null_mut();
     }
 
-    // シリアライズなしでデータが入っている場合は参照を作る
-    if shm_data_state == IOX_CHUNK_CONTAINS_RAW_DATA {
-        // SAFETY: raw-data 状態では buffer は非 null の T を指す。
-        d.sample = SampleData::ShmData(unsafe { NonNull::new_unchecked(buffer as *mut T) });
-    }
-
-    // serdataのポインタを返す
-    let ptr = Box::into_raw(d);
-    ptr as *mut ddsi_serdata
+    let size = metadata.sample_size as usize;
+    let cdr = unsafe { std::slice::from_raw_parts(loan.sample_ptr.cast::<u8>(), size) }.to_vec();
+    let mut serdata = SerData::<T>::new(sertype, kind);
+    serdata.cdr = Some(cdr);
+    serdata.serdata.statusinfo = metadata.statusinfo;
+    serdata.serdata.timestamp.v = metadata.timestamp;
+    let ptr = Box::into_raw(serdata);
+    ptr.cast()
 }
 
 #[cfg(test)]
@@ -1053,14 +889,7 @@ mod tests {
     use cyclonedds_sys::{SDK_DATA, ddsi_sertype};
 
     use super::*;
-    use crate::{
-        DdsParticipant, DdsPublisher, DdsTopic, Sample,
-        common::{TestDomain, tests::TestTypeAlloc},
-        sertype::{
-            SerType,
-            tests::{IoxChunk, SerTypeOps, Writer},
-        },
-    };
+    use crate::{Sample, common::tests::TestTypeAlloc, sertype::SerType};
 
     // serdata_opsの各関数を呼び出すテスト構造体
     struct SerDataOps<'a, T> {
@@ -1168,36 +997,6 @@ mod tests {
             }
         }
 
-        // ops->from_iox_bufferを呼び出す
-        fn serdata_from_iox_buffer(&self, buffer: &IoxChunk<'_, T>) -> Option<Box<SerData<T>>> {
-            unsafe {
-                let res = self.ops().from_iox_buffer.unwrap()(
-                    self.sertype_ptr(),
-                    SDK_DATA,
-                    std::ptr::null_mut(),
-                    buffer.ptr,
-                );
-                if res.is_null() {
-                    None
-                } else {
-                    SerData::from_raw(res).into()
-                }
-            }
-        }
-
-        // テストで作ったIoxChunkは通常と返却方法が異なるのでマニュアルで解体する
-        // NOTE: これでも8つのバッファの確保でSEGVが起きるのでiox_headerのアクセスの確認程度に留める
-        fn free_iox_chunk_and_serdata(
-            &self,
-            mut serdata: Box<SerData<T>>,
-            buffer: IoxChunk<'_, T>,
-        ) {
-            serdata.serdata.iox_chunk = std::ptr::null_mut();
-            serdata.serdata.iox_subscriber = std::ptr::null_mut();
-
-            buffer.return_loan();
-        }
-
         // UDP通信向けのシリアライズとバッファ参照コールバックのテスト
         fn serdata_to_ser_ref_for_fragchain(
             &self,
@@ -1279,45 +1078,6 @@ mod tests {
             cdr_assembly_failed: after.cdr_assembly_failed - before.cdr_assembly_failed,
         };
         assert_eq!(expected, actual);
-        Ok(())
-    }
-
-    // Shm指定があるケースではiox_chunkを使った送受信を行う
-    #[test_log::test]
-    #[ignore = "Iceoryx依存"]
-    fn test_serdata_ops_iox() -> anyhow::Result<()> {
-        let domain_id = TestDomain::SerdataOpsIox.id();
-        let _domain = crate::common::tests::create_shm_domain(domain_id)?;
-        let p = unsafe { DdsParticipant::create(Some(domain_id), None, None)? };
-        let pubb = DdsPublisher::create(&p, None, None)?;
-        let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serdata_ops_iox", None, None)?;
-        let w = Writer::create(&pubb, topic)?;
-
-        let tp = SerType::<TestTypeAlloc>::new();
-        let ops = SerDataOps::new(&tp);
-        let tpops = SerTypeOps::<TestTypeAlloc>::new(&tp);
-        let td = TestTypeAlloc::samples(2);
-        for expect in td {
-            tracing::trace!("Testing serdata ops with iox chunk {:?}", expect);
-            let expect = Sample::from(expect);
-
-            // IoxChunkへの書き込みシーケンス
-            let iox_size = tpops.get_serialized_size(&expect);
-            // iox_chunkはWriterがプール管理するのでwriterから借りる
-            let buffer = w.dds_loan_shared_memory_buffer(iox_size).unwrap();
-            assert!(tpops.serialize_into(&expect, &buffer));
-
-            // sertype_opsの関数によってシリアライズされたデータを確認
-            let act = cdr::deserialize::<TestTypeAlloc>(buffer.as_slice())?;
-            assert_eq!(expect.get_expected().as_ref(), &act);
-
-            // bufferからserdataを作成する
-            let recv = ops.serdata_from_iox_buffer(&buffer).unwrap();
-            let mut act = Sample::<TestTypeAlloc>::default();
-            assert!(ops.to_sample(&recv, &mut act));
-            assert_eq!(expect.get_expected().as_ref(), act.try_deref().unwrap());
-            ops.free_iox_chunk_and_serdata(recv, buffer);
-        }
         Ok(())
     }
 

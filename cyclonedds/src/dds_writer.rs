@@ -480,20 +480,11 @@ impl<T> DdsWriter<T>
 where
     T: Sized + FixedTopicType,
 {
-    /// fixed_sizeなデータ型をIceoryxメモリバッファに直接書き込むためのメソッド
-    /// 全ての参加者によって送受信のメモリレイアウトが保証できる場合にのみ使用可能
+    /// Cyclone DDSの貸出しバッファを要求する。
     ///
-    /// [Self::write]にFixed Sizeの型を渡すと、CycloneDDSはそのポインタからTのサイズ分のメモリをコピーする
-    /// この時ポインタは本来書き込みたい`T`ではなく`Sample<T>`がを指しているため意図しないデータが書かれる。
-    /// これを回避するために利用側がIceoryxメモリバッファを借用し直接データを書き込む方法を提供している
-    /// 内部では `serdata_from_iox_buffer` を使って`crate::serdata::SerData`を構築している
-    ///
-    /// # Panics
-    ///
-    /// fixed_size制約は非常に厳しく、構造体のメモリのアライメント、レイアウトが同じでなければならない。
-    /// もしも対応関係がなければ壊れたデータが送受信される。
-    /// また、参加者がシリアライズを必要とする場合(pythonクライアントなど)は
-    /// 送信側が`serdata_from_sample`関数にフォールバックされて、sampleの型不整合によりパニックが発生する
+    /// cyclonedds-rsの型サポートはPSMXのシリアライズ済み経路を使うため、現在は
+    /// `DDS_RETCODE_UNSUPPORTED` を返す。直接のRAW貸出しはRustの`Sample<T>`表現と
+    /// 互換なアプリケーション型ABIを提供してから有効化する。
     pub fn loan(&mut self) -> Result<Loaned<T>, DDSError> {
         let mut p_sample: *mut T = std::ptr::null_mut();
         let voidpp: *mut *mut T = &mut p_sample;
@@ -554,14 +545,11 @@ impl<T> Drop for DdsWriter<T> {
 
 #[cfg(test)]
 mod test {
-    use core::panic;
-
     use super::*;
     use crate::common::TestDomain;
     use crate::*;
     use cdds_derive::Topic;
     use serde::{Deserialize, Serialize};
-    use tokio::runtime::Runtime;
 
     #[repr(C)]
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
@@ -589,131 +577,13 @@ mod test {
             Self {
                 a: 10,
                 b: 20,
-                c: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                c: [0; 10],
                 d: [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5],
                 e: 0,
                 pos: Position::default(),
             }
         }
     }
-
-    // Why: TransientLocalのhistory深さをiceoryxの上限(既定16)より深くすると、
-    //      cycloneddsが`dds_writer_supports_shm`でゼロコピー経路を黙って無効化する。
-    //      `Policy`のdepth指定がこの境界をまたぐことを、切り替わる点ごと固定する
-    // Method: depthを振ってwriterを作り、`loan()`の成否でSHM経路の有無を観測する
-    #[test_log::test]
-    #[ignore = "requires iox-roudi to be running"]
-    fn test_transient_local_depth_switches_shm_path() {
-        #[derive(Debug, PartialEq)]
-        struct Row {
-            depth: i32,
-            /// loanできる＝そのwriterがゼロコピー経路を使える
-            can_loan: bool,
-        }
-
-        let participant = crate::common::tests::shared_participant_with_config(
-            TestDomain::WriterLoan.id(),
-            crate::common::tests::CYCLONE_SHM_CONFIG,
-        );
-        let publisher = DdsPublisher::create(participant, None, None).unwrap();
-
-        let actual = [1, 16, 17, 32]
-            .into_iter()
-            .map(|depth| {
-                let topic = TestTopic::create_topic(
-                    participant,
-                    Some(&format!("shm_depth_{depth}")),
-                    None,
-                    None,
-                )
-                .unwrap();
-                let mut writer = WriterBuilder::new()
-                    .with_qos(
-                        Policy::create_transient_local(depth, None)
-                            .unwrap()
-                            .to_qos()
-                            .unwrap(),
-                    )
-                    .create(&publisher, topic)
-                    .unwrap();
-                Row {
-                    depth,
-                    can_loan: writer.loan().is_ok(),
-                }
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            actual,
-            vec![
-                Row {
-                    depth: 1,
-                    can_loan: true
-                },
-                Row {
-                    depth: 16,
-                    can_loan: true
-                },
-                Row {
-                    depth: 17,
-                    can_loan: false
-                },
-                Row {
-                    depth: 32,
-                    can_loan: false
-                },
-            ]
-        );
-    }
-
-    #[test]
-    #[ignore = "requires iox-roudi to be running"]
-    fn test_loan() {
-        let participant = crate::common::tests::shared_participant_with_config(
-            TestDomain::WriterLoan.id(),
-            crate::common::tests::CYCLONE_SHM_CONFIG,
-        );
-
-        let topic = TestTopic::create_topic(participant, Some("test_topic"), None, None).unwrap();
-
-        let publisher = DdsPublisher::create(participant, None, None).unwrap();
-
-        let mut writer = DdsWriter::create(&publisher, topic.clone(), None, None).unwrap();
-
-        let subscriber = DdsSubscriber::create(participant, None, None).unwrap();
-        let reader = DdsReader::create_async(&subscriber, topic, None).unwrap();
-
-        let rt = Runtime::new().unwrap();
-
-        rt.block_on(async {
-            let _another_task = tokio::spawn(async move {
-                let mut samples = TestTopic::create_sample_buffer(5);
-                if let Ok(t) = reader.take_async(&mut samples).await {
-                    assert_eq!(t, 1);
-                    for s in samples.iter() {
-                        println!("Got sample {:?}", s);
-                    }
-                } else {
-                    panic!("reader get failed");
-                }
-            });
-
-            // add a delay to make sure the data is not ready immediately
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-            let mut loaned = writer.loan().unwrap();
-
-            let ptr = loaned.as_mut_ptr().unwrap();
-            let topic = TestTopic::default();
-
-            unsafe { ptr.write(topic) };
-            let loaned = loaned.assume_init();
-            writer.return_loan(loaned).unwrap();
-
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        });
-    }
-
     /// Why: `watch_reader_absence`は`with_listener`/`with_listener_builder`より優先される
     ///      べきで、逆転しているとhook済み`with_listener`を渡しただけで不在監視が
     ///      黙って無効化される(コンパイルは通り、以後`is_reader_absent()`が常に`false`を

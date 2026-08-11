@@ -19,7 +19,7 @@ jobs:
           submodules: true
       - name: Verify vendored Cyclone DDS
         env:
-          CYCLONEDDS_VERSION: 0.10.5
+          CYCLONEDDS_VERSION: 11.0.0
         run: |
           expected_sha=$(git ls-tree "$GITHUB_SHA" vendor/cyclonedds | awk '{print $3}')
           actual_sha=$(git -C vendor/cyclonedds rev-parse HEAD)
@@ -62,3 +62,7 @@ jobs:
 
       - name: run tests
         run: make test
+
+      - name: run PSMX shared-memory integration
+        if: matrix.os == 'ubuntu-24.04'
+        run: make BENCH_RUN_ID="ci-${{ github.run_id }}-${{ github.run_attempt }}" test-local-shm

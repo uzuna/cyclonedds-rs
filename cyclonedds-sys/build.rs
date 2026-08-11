@@ -65,7 +65,7 @@ mod build {
 
     static ENV_PREFIX: &str = "CYCLONEDDS";
     static LINKLIB: &str = "ddsc";
-    static GIT_COMMIT: &str = "76360fb73907ce3dba397e89090a7a4ecf4f1246";
+    static GIT_COMMIT: &str = "1f7f75c0fa7fc9070dafaea43e14924d2537b59e";
 
     #[allow(clippy::enum_variant_names)]
     pub enum HeaderLocation {
@@ -148,10 +148,10 @@ mod build {
                 .current_dir(format!("{}/build", cyclonedds_src_path.to_str().unwrap()));
 
             #[cfg(feature = "shm")]
-            command.arg("-DENABLE_SHM=YES");
+            command.arg("-DENABLE_ICEORYX=YES");
 
             #[cfg(not(feature = "shm"))]
-            command.arg("-DENABLE_SHM=NO");
+            command.arg("-DENABLE_ICEORYX=NO");
 
             command
         });
@@ -332,6 +332,7 @@ mod build {
     fn add_whitelist(builder: bindgen::Builder) -> bindgen::Builder {
         builder
             .derive_default(true)
+            .generate_comments(false)
             .generate_cstr(true)
             .prepend_enum_name(false)
             // basic operations
@@ -352,9 +353,6 @@ mod build {
             .allowlist_function(r"^ddsrt_md5_.+$")
             // for shm feature
             .allowlist_function(r"^dds_((loan).+|.+_loan)$")
-            // handling iceoryx chunks
-            .allowlist_function("iceoryx_header_from_chunk")
-            .allowlist_function("free_iox_chunk")
             // handling builtin topics
             .allowlist_type(r"^dds_builtintopic_.+")
             .allowlist_type(r"^dds_stream_.+")

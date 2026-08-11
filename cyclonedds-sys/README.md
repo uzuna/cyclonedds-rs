@@ -1,12 +1,12 @@
 # cyclonedds-sys
 Rust binding to cyclone-dds  https://github.com/eclipse-cyclonedds/cyclonedds.git.
 
-Tested with CycloneDDS version 0.10.x series - https://github.com/eclipse-cyclonedds/cyclonedds/tree/releases/0.10.x Please ensure that this version of CycloneDDS is built and installed on your machine.
+Tested with Cyclone DDS 11.0.0. Please ensure that this version is built and installed on your machine.
 
 Supports only Linux with SHM feature enabled.
 
 ```
-cmake -DENABLE_SHM=1 ..
+cmake -DENABLE_ICEORYX=YES ..
 ```
 
 

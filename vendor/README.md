@@ -3,7 +3,7 @@
 このディレクトリには、ワークスペースで利用する vendored 依存ライブラリをビルドするための `Makefile` が含まれています。
 
 - `vendor/iceoryx` (v2.0.2)
-- `vendor/cyclonedds` (releases/0.10.x)
+- `vendor/cyclonedds` (11.0.0)
 
 ## 1. サブモジュールを初期化する
 
@@ -28,7 +28,7 @@ make build
 `make build` では次の処理を行います。
 
 - `iceoryx` をビルドし、`vendor/iceoryx/install` にインストール
-- `cyclonedds` を共有メモリ有効（`-DENABLE_SHM=YES`）でビルド
+- `cyclonedds` を PSMX/Iceoryx 有効（`-DENABLE_ICEORYX=YES`）でビルド
 - インストール済み `iceoryx` を `CMAKE_PREFIX_PATH` に設定
 - `cyclonedds` を `vendor/cyclonedds/install` にインストール
 
@@ -36,6 +36,7 @@ make build
 
 - `vendor/iceoryx/install/bin/iox-roudi`
 - `vendor/cyclonedds/install/lib/libddsc.so`
+- `vendor/cyclonedds/install/lib/libpsmx_iox.so`
 
 ## 4. 環境変数を設定する
 

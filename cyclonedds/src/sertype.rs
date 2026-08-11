@@ -60,9 +60,8 @@ impl<T> SerType<T> {
                         true,
                     );
                     let mut sertype = sertype.assume_init();
-                    // Untypedでは型が不明なのでIOXのRAW扱いは出来ない
-                    sertype.set_fixed_size(0);
-                    sertype.iox_size = 0;
+                    // Rustのアプリケーション表現はCyclone DDSの生メモリ型ではない。
+                    sertype.set_is_memcpy_safe(0);
                     sertype
                 }
             },
@@ -100,14 +99,9 @@ where
                         !T::has_key(),
                     );
                     let mut sertype = sertype.assume_init();
-                    // 固定型の場合はフラグとサイズを設定する
-                    if T::is_fixed_size() {
-                        sertype.set_fixed_size(1);
-                        sertype.iox_size = std::mem::size_of::<T>() as u32;
-                    } else {
-                        // 可変長型の場合はフラグを解除して、ioxは都度取得する
-                        sertype.set_fixed_size(0);
-                    }
+                    // Sample<T> はCyclone DDSのネイティブ型表現ではないため、
+                    // 固定長のTでもRAW PSMX経路には渡さない。
+                    sertype.set_is_memcpy_safe(0);
                     sertype
                 }
             },
@@ -171,7 +165,7 @@ impl<T> Drop for SerType<T> {
 // 理由は [SerType] のopsテーブル定義を参照。
 const fn create_sertype_ops_base<T>() -> ddsi_sertype_ops {
     ddsi_sertype_ops {
-        // version情報。0.10.5時点ではv0のみ
+        // 現行の型サポートABIはv0を使う
         version: Some(ddsi_sertype_v0),
         // 引数は特に使わないのでnull
         arg: std::ptr::null_mut(),
@@ -356,10 +350,17 @@ unsafe extern "C" fn sertype_hash<T>(tp: *const ddsi_sertype) -> u32 {
 #[tracing::instrument(level = "trace")]
 unsafe extern "C" fn dummy_sertype_get_serialized_size<T>(
     tp: *const ddsi_sertype,
-    sample: *const ::std::os::raw::c_void,
-) -> usize {
+    _sdkind: cyclonedds_sys::ddsi_serdata_kind,
+    _sample: *const ::std::os::raw::c_void,
+    size: *mut usize,
+    enc_identifier: *mut u16,
+) -> i32 {
     let sertype = SerType::<T>::const_ref_from_sertype(tp);
     trace!(type_name = sertype.type_name());
+    unsafe {
+        *size = 0;
+        *enc_identifier = 0;
+    }
     0
 }
 
@@ -368,8 +369,9 @@ unsafe extern "C" fn dummy_sertype_get_serialized_size<T>(
 #[tracing::instrument(level = "trace")]
 unsafe extern "C" fn dummy_sertype_serialize_into<T>(
     tp: *const ddsi_sertype,
-    sample: *const ::std::os::raw::c_void,
-    dst_buffer: *mut ::std::os::raw::c_void,
+    _sdkind: cyclonedds_sys::ddsi_serdata_kind,
+    _sample: *const ::std::os::raw::c_void,
+    _dst_buffer: *mut ::std::os::raw::c_void,
     dst_size: usize,
 ) -> bool {
     let sertype = SerType::<T>::const_ref_from_sertype(tp);
@@ -377,25 +379,34 @@ unsafe extern "C" fn dummy_sertype_serialize_into<T>(
     true
 }
 
-// fixedでない型をシリアライズする特にioxに確保するメモリサイズを教える
+// PSMX用のシリアライズ済みデータサイズを返す
 #[tracing::instrument(level = "trace")]
 unsafe extern "C" fn sertype_get_serialized_size<T>(
     tp: *const ddsi_sertype,
+    _sdkind: cyclonedds_sys::ddsi_serdata_kind,
     sample: *const ::std::os::raw::c_void,
-) -> usize
+    size: *mut usize,
+    enc_identifier: *mut u16,
+) -> i32
 where
     T: serde::Serialize,
 {
     let sertype = SerType::<T>::const_ref_from_sertype(tp);
     trace!(type_name = sertype.type_name());
     let s = Sample::<T>::const_ref_from_sample(sample as *const Sample<T>);
-    cdr::calc_serialized_size(s.get_expected().as_ref()) as usize
+    unsafe {
+        *size = cdr::calc_serialized_size(s.get_expected().as_ref()) as usize;
+        // CDR BEはCyclone DDS 11のXCDR1ネイティブ識別子である0x0000。
+        *enc_identifier = 0;
+    }
+    0
 }
 
 // fixedでない型をシリアライズする特に呼ばれる
 #[tracing::instrument(level = "trace")]
 unsafe extern "C" fn sertype_serialize_into<T>(
     tp: *const ddsi_sertype,
+    _sdkind: cyclonedds_sys::ddsi_serdata_kind,
     sample: *const ::std::os::raw::c_void,
     dst_buffer: *mut ::std::os::raw::c_void,
     dst_size: usize,
@@ -428,128 +439,11 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::{ffi::c_void, marker::PhantomData, sync::Arc};
+    use std::ffi::c_void;
 
-    use cyclonedds_sys::{
-        DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT, DDSError, DdsEntity,
-        IOX_CHUNK_CONTAINS_SERIALIZED_DATA, dds_create_writer, dds_return_loan, dds_write,
-        ddsi_sertype, iceoryx_header, iceoryx_header_from_chunk,
-    };
+    use cyclonedds_sys::{DDS_FREE_ALL_BIT, DDS_FREE_CONTENTS_BIT, ddsi_sertype};
 
-    use crate::{
-        DdsParticipant, DdsPublisher, DdsTopic, DdsWritable, Entity, Sample, TopicType,
-        common::{TestDomain, tests::TestTypeAlloc},
-        sertype::SerType,
-    };
-
-    // IoxChunkテストのためのWriter
-    pub struct Writer<T> {
-        entity: DdsEntity,
-        _phantom: PhantomData<T>,
-    }
-
-    impl<T> Entity for Writer<T> {
-        fn entity(&self) -> &DdsEntity {
-            &self.entity
-        }
-    }
-
-    impl<T> Writer<T> {
-        pub fn create(entity: &dyn DdsWritable, topic: DdsTopic<T>) -> Result<Self, DDSError>
-        where
-            T: std::marker::Sized + TopicType,
-        {
-            unsafe {
-                let w = dds_create_writer(
-                    entity.entity().entity(),
-                    topic.entity().entity(),
-                    std::ptr::null(),
-                    std::ptr::null_mut(),
-                );
-                if w < 1 {
-                    return Err(DDSError::from(w));
-                } else {
-                    Ok(Writer {
-                        entity: DdsEntity::new(w),
-                        _phantom: PhantomData,
-                    })
-                }
-            }
-        }
-
-        /// Iceoryxの共有メモリバッファを借用する
-        pub fn dds_loan_shared_memory_buffer<'a>(&'a self, size: usize) -> Option<IoxChunk<'a, T>> {
-            unsafe {
-                let mut p_sample: *mut c_void = std::ptr::null_mut();
-                // dds_write実装では shm_create_chunk で確保しているが、公開されていない関数なのでここでは使えない
-                // writerに紐付けられたバッファを得る類似関数で代替している
-                let res = cyclonedds_sys::dds_loan_shared_memory_buffer(
-                    self.entity().entity(),
-                    size,
-                    &mut p_sample as *mut *mut c_void,
-                );
-                if res == 0 {
-                    Some(IoxChunk::new(self, p_sample))
-                } else {
-                    None
-                }
-            }
-        }
-
-        fn write_to_entity(entity: &DdsEntity, msg: std::sync::Arc<T>) -> Result<(), DDSError> {
-            unsafe {
-                let sample = Sample::<T>::from(msg);
-                let sample = &sample as *const Sample<T>;
-                let sample = sample as *const c_void;
-                let ret = dds_write(entity.entity(), sample);
-                if ret >= 0 {
-                    Ok(())
-                } else {
-                    Err(DDSError::from(ret))
-                }
-            }
-        }
-
-        pub fn write(&mut self, msg: std::sync::Arc<T>) -> Result<(), DDSError> {
-            Self::write_to_entity(&self.entity, msg)
-        }
-    }
-
-    // Iceoryxについての一時的な参照
-    // バッファはserdataに紐付けて開放される
-    pub struct IoxChunk<'a, T> {
-        w: &'a Writer<T>,
-        pub ptr: *mut c_void,
-    }
-
-    impl<'a, T> IoxChunk<'a, T> {
-        pub fn new(w: &'a Writer<T>, ptr: *mut c_void) -> Self {
-            IoxChunk { w, ptr }
-        }
-
-        fn header_mut(&self) -> &mut iceoryx_header {
-            unsafe { &mut *iceoryx_header_from_chunk(self.ptr) }
-        }
-
-        // 書き込みデータ領域を取得する
-        pub fn as_slice(&self) -> &[u8] {
-            unsafe {
-                let header = self.header_mut();
-                std::slice::from_raw_parts(self.ptr as *const u8, header.data_size as usize)
-            }
-        }
-
-        // serdataに結び付けない場合に借りたバッファを開放する
-        pub fn return_loan(mut self) {
-            unsafe {
-                let _ = dds_return_loan(
-                    self.w.entity().entity(),
-                    &mut self.ptr as *mut *mut c_void,
-                    1,
-                );
-            }
-        }
-    }
+    use crate::{Sample, common::tests::TestTypeAlloc, sertype::SerType};
 
     // settype_opsの関数を呼び出すための補助構造体
     pub struct SerTypeOps<'a, T> {
@@ -569,40 +463,6 @@ pub mod tests {
         #[inline]
         unsafe fn sertype_ptr(&self) -> *const ddsi_sertype {
             self.sertype as *const SerType<T> as *const ddsi_sertype
-        }
-
-        #[inline]
-        unsafe fn sample_ptr(sample: &Sample<T>) -> *const c_void {
-            sample as *const Sample<T> as *const c_void
-        }
-
-        // ops->get_serialized_sizeを呼び出す
-        pub fn get_serialized_size(&self, sample: &Sample<T>) -> usize {
-            unsafe {
-                self.ops().get_serialized_size.unwrap()(
-                    self.sertype_ptr(),
-                    Self::sample_ptr(sample),
-                )
-            }
-        }
-
-        // ops->serialize_intoを呼び出す
-        pub fn serialize_into(&self, sample: &Sample<T>, buffer: &IoxChunk<'_, T>) -> bool {
-            let target_size = self.get_serialized_size(sample);
-            unsafe {
-                let res = self.ops().serialize_into.unwrap()(
-                    self.sertype_ptr(),
-                    Self::sample_ptr(sample),
-                    buffer.ptr,
-                    target_size,
-                );
-                // shmがシリアライズ済みデータであることを示す
-                if res {
-                    let header = buffer.header_mut();
-                    header.shm_data_state = IOX_CHUNK_CONTAINS_SERIALIZED_DATA;
-                }
-                res
-            }
         }
 
         // ops->realloc_samplesを呼び出す
@@ -636,42 +496,6 @@ pub mod tests {
                 );
             }
         }
-    }
-
-    // FixedSizeでない型のシリアライズ関数のテスト
-    #[test_log::test]
-    #[ignore = "requires iox-roudi to be running"]
-    fn test_sertype_ops_serialize() -> anyhow::Result<()> {
-        let domain_id = TestDomain::SertypeOpsSerialize.id();
-        let _domain = crate::common::tests::create_shm_domain(domain_id)?;
-        let p = unsafe { DdsParticipant::create(Some(domain_id), None, None)? };
-        let pubb = DdsPublisher::create(&p, None, None)?;
-        let topic = DdsTopic::<TestTypeAlloc>::create(&p, "serops_iox", None, None)?;
-        let mut w = Writer::create(&pubb, topic)?;
-
-        // iox向けにはシリアライズがすでに走る。スレッド間共有なら自前で行われているはずで
-        // ioxを必要とするのは別プロセスであると想定される
-        w.write(Arc::new(TestTypeAlloc::default()))?;
-
-        let tp = SerType::<TestTypeAlloc>::new();
-        let tpops = SerTypeOps::<TestTypeAlloc>::new(&tp);
-        let td = TestTypeAlloc::samples(4);
-        for expect in td {
-            let expect = Sample::from(expect);
-
-            // IoxChunkへの書き込みシーケンス
-            let iox_size = tpops.get_serialized_size(&expect);
-            let buffer = w.dds_loan_shared_memory_buffer(iox_size).unwrap();
-            assert!(tpops.serialize_into(&expect, &buffer));
-
-            // sertype_opsの関数によってシリアライズされたデータを確認
-            let act = cdr::deserialize::<TestTypeAlloc>(buffer.as_slice())?;
-            assert_eq!(expect.get_expected().as_ref(), &act);
-
-            // 消費者がいないので開放
-            buffer.return_loan();
-        }
-        Ok(())
     }
 
     // ops->realloc_samplesとops->free_samplesのテスト

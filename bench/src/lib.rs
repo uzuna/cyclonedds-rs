@@ -642,7 +642,12 @@ fn file_hash_value(path: impl AsRef<Path>) -> Value {
 pub fn xml_config(shm: bool) -> String {
     let max_message = "14720B";
     let fragment_size = "1344B";
-    let shared_memory = if shm { "true" } else { "false" };
+    let psmx = if shm {
+        r#"
+        <PubSubMessageExchange type="iox" library="psmx_iox" config="LOG_LEVEL=INFO;" />"#
+    } else {
+        ""
+    };
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" ?>
 <CycloneDDS xmlns="https://cdds.io/config">
@@ -650,14 +655,12 @@ pub fn xml_config(shm: bool) -> String {
     <General>
       <Interfaces>
         <NetworkInterface name="lo" priority="default" />
+        {psmx}
       </Interfaces>
       <AllowMulticast>true</AllowMulticast>
       <MaxMessageSize>{max_message}</MaxMessageSize>
       <FragmentSize>{fragment_size}</FragmentSize>
     </General>
-    <SharedMemory>
-      <Enable>{shared_memory}</Enable>
-    </SharedMemory>
   </Domain>
 </CycloneDDS>"#
     )

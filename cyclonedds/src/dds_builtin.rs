@@ -518,7 +518,7 @@ mod tests {
     const CYCLONE_LOOPBACK_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>
     <CycloneDDS xmlns="https://cdds.io/config"
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/iceoryx/etc/cyclonedds.xsd">
+                xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/11.0.0/etc/cyclonedds.xsd">
         <Domain id="any">
             <General>
                 <Interfaces>
@@ -539,7 +539,6 @@ mod tests {
     // 参加者の検知が期待通りか確認
     #[tokio::test]
     async fn test_discovery_participant() -> anyhow::Result<()> {
-        // Make sure iox-roudi is running
         let participant = crate::common::tests::shared_participant_with_config(
             TestDomain::BuiltinDiscoveryParticipant.id(),
             CYCLONE_LOOPBACK_CONFIG,
