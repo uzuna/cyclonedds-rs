@@ -27,13 +27,19 @@ def write_json(path, value):
     )
 
 
+def parse_rfc3339(value):
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return dt.datetime.fromisoformat(value)
+
+
 def run_document(metadata, cases, results, commit, run_id, measured_at, run_url, artifact_url):
     return {
         "schema_version": 1,
         "run_id": run_id,
         "commit": commit,
         "measured_at": measured_at,
-        "measured_at_unix": int(dt.datetime.fromisoformat(measured_at).timestamp()),
+        "measured_at_unix": int(parse_rfc3339(measured_at).timestamp()),
         "run_url": run_url,
         "artifact_url": artifact_url,
         "metadata": metadata,

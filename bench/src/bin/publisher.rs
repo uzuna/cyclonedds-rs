@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use cyclonedds_bench::{
     BenchmarkCase, CaseFile, DOMAIN_ID, create_named_topic, create_writer, emit_control,
-    make_message, monotonic_ns, wait_for_match, wait_for_start,
+    make_message, monotonic_ns, wait_for_match, wait_for_start, wait_for_stop,
 };
 use cyclonedds_rs::ParticipantBuilder;
 
@@ -49,10 +49,12 @@ fn publish(
     case_definition: &BenchmarkCase,
     resolved_case: cyclonedds_bench::ResolvedCase,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let total_messages = case_definition.warmup_messages + case_definition.measured_messages;
+    let history_depth = i32::try_from(total_messages)?;
     let participant = unsafe { ParticipantBuilder::new().with_domain(DOMAIN_ID).create()? };
     let topic = create_named_topic(&participant, &arguments.topic)?;
     let matched = Arc::new(AtomicBool::new(false));
-    let mut writer = create_writer(&participant, topic, matched.clone())?;
+    let mut writer = create_writer(&participant, topic, matched.clone(), history_depth)?;
 
     emit_control("READY role=publisher")?;
     wait_for_match(
@@ -62,7 +64,6 @@ fn publish(
     emit_control("MATCHED role=publisher")?;
     wait_for_start()?;
 
-    let total_messages = case_definition.warmup_messages + case_definition.measured_messages;
     let mut bytes_sent = 0u128;
     let period = case_definition
         .rate_hz
@@ -103,5 +104,6 @@ fn publish(
         "DONE role=publisher run_id={} messages_sent={} bytes_sent={} elapsed_ns={}",
         arguments.run_id, total_messages, bytes_sent, elapsed_ns
     ))?;
+    wait_for_stop()?;
     Ok(())
 }

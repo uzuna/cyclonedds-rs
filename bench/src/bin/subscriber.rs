@@ -50,11 +50,13 @@ fn receive(
     case_definition: &BenchmarkCase,
     resolved_case: cyclonedds_bench::ResolvedCase,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let total_messages = case_definition.warmup_messages + case_definition.measured_messages;
+    let history_depth = i32::try_from(total_messages)?;
     let participant = unsafe { ParticipantBuilder::new().with_domain(DOMAIN_ID).create()? };
     let subscriber = DdsSubscriber::create(&participant, None, None)?;
     let topic = create_named_topic(&participant, &arguments.topic)?;
     let matched = Arc::new(AtomicBool::new(false));
-    let reader = create_reader(&subscriber, topic, matched.clone())?;
+    let reader = create_reader(&subscriber, topic, matched.clone(), history_depth)?;
 
     emit_control("READY role=subscriber")?;
     wait_for_match(
@@ -64,9 +66,8 @@ fn receive(
     emit_control("MATCHED role=subscriber")?;
     wait_for_start()?;
 
-    let total_messages = case_definition.warmup_messages + case_definition.measured_messages;
     let deadline = Instant::now() + Duration::from_secs(case_definition.timeout_seconds);
-    let mut samples = SampleBuffer::new(32);
+    let mut samples = SampleBuffer::new(history_depth as usize);
     let mut seen = HashSet::new();
     let mut messages_received = 0u64;
     let mut bytes_received = 0u128;
@@ -82,19 +83,19 @@ fn receive(
         match reader.take_now(&mut samples) {
             Ok(_) => {
                 for (message, info) in samples.iter_items() {
-                    messages_received += 1;
-                    bytes_received += message.payload.len() as u128;
                     if !info.is_valid() {
                         payload_error = Some("received invalid sample".to_string());
                         continue;
                     }
+                    messages_received += 1;
+                    bytes_received += message.payload.len() as u128;
                     if !seen.insert(message.sequence) {
                         duplicate += 1;
                     }
-                    if let Some(previous) = last_sequence {
-                        if message.sequence < previous {
-                            out_of_order += 1;
-                        }
+                    if let Some(previous) = last_sequence
+                        && message.sequence < previous
+                    {
+                        out_of_order += 1;
                     }
                     last_sequence = Some(message.sequence);
                     if message.sequence < total_messages {

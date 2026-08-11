@@ -266,14 +266,17 @@ pub fn monotonic_ns() -> u64 {
         .saturating_add(value.tv_nsec as u64)
 }
 
-pub fn make_qos() -> Result<DdsQos, Box<dyn std::error::Error>> {
+pub fn make_qos(history_depth: i32) -> Result<DdsQos, Box<dyn std::error::Error>> {
     let mut qos = DdsQos::create()?;
     qos.set_reliability(
         cyclonedds_rs::dds_reliability_kind::DDS_RELIABILITY_RELIABLE,
         Duration::from_secs(1),
     )
     .set_durability(cyclonedds_rs::dds_durability_kind::DDS_DURABILITY_VOLATILE)
-    .set_history(cyclonedds_rs::dds_history_kind::DDS_HISTORY_KEEP_LAST, 32)?;
+    .set_history(
+        cyclonedds_rs::dds_history_kind::DDS_HISTORY_KEEP_LAST,
+        history_depth,
+    )?;
     Ok(qos)
 }
 
@@ -324,8 +327,9 @@ pub fn create_writer(
     participant: &DdsParticipant,
     topic: DdsTopic<BenchmarkMessage>,
     matched: Arc<AtomicBool>,
+    history_depth: i32,
 ) -> Result<DdsWriter<BenchmarkMessage>, Box<dyn std::error::Error>> {
-    let qos = make_qos()?;
+    let qos = make_qos(history_depth)?;
     let listener = matched_listener(matched, true);
     Ok(WriterBuilder::new()
         .with_qos(qos)
@@ -337,8 +341,9 @@ pub fn create_reader(
     subscriber: &DdsSubscriber,
     topic: DdsTopic<BenchmarkMessage>,
     matched: Arc<AtomicBool>,
+    history_depth: i32,
 ) -> Result<DdsReader<BenchmarkMessage>, Box<dyn std::error::Error>> {
-    let qos = make_qos()?;
+    let qos = make_qos(history_depth)?;
     let listener = matched_listener(matched, false);
     Ok(ReaderBuilder::new()
         .with_qos(qos)
@@ -347,13 +352,21 @@ pub fn create_reader(
 }
 
 pub fn wait_for_start() -> Result<(), Box<dyn std::error::Error>> {
+    wait_for_control("START")
+}
+
+pub fn wait_for_stop() -> Result<(), Box<dyn std::error::Error>> {
+    wait_for_control("STOP")
+}
+
+fn wait_for_control(expected: &str) -> Result<(), Box<dyn std::error::Error>> {
     let stdin = io::stdin();
     let mut line = String::new();
     stdin.read_line(&mut line)?;
-    if line.trim() == "START" {
+    if line.trim() == expected {
         Ok(())
     } else {
-        Err(format!("expected START, got {}", line.trim()).into())
+        Err(format!("expected {expected}, got {}", line.trim()).into())
     }
 }
 

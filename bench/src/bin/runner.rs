@@ -284,7 +284,7 @@ fn run_children(
     let mut result = None;
     let mut messages_sent = None;
     let mut bytes_sent = None;
-    while result.is_none() || messages_sent.is_none() {
+    while result.is_none() || messages_sent.is_none() || bytes_sent.is_none() {
         receive_result_line(&subscriber.lines, &mut result)?;
         receive_publisher_line(&publisher.lines, &mut messages_sent, &mut bytes_sent)?;
         if Instant::now() >= result_deadline {
@@ -296,8 +296,10 @@ fn run_children(
     }
 
     let mut result = result.ok_or("subscriber did not return a result")?;
-    result.messages_sent = messages_sent.unwrap_or(0);
-    result.bytes_sent = bytes_sent.unwrap_or(0);
+    result.messages_sent = messages_sent.ok_or("publisher did not report messages_sent")?;
+    result.bytes_sent = bytes_sent.ok_or("publisher did not report bytes_sent")?;
+    publisher.stdin.write_all(b"STOP\n")?;
+    publisher.stdin.flush()?;
     let subscriber_status = subscriber.child.wait()?.success();
     let publisher_status = publisher.child.wait()?.success();
     if !subscriber_status || !publisher_status {
@@ -389,9 +391,16 @@ fn receive_publisher_line(
 ) -> Result<(), Box<dyn std::error::Error>> {
     match receiver.try_recv() {
         Ok(line) if line.starts_with("DONE ") => {
-            *messages_sent =
-                parse_value(&line, "messages_sent").and_then(|value| value.parse().ok());
-            *bytes_sent = parse_value(&line, "bytes_sent").and_then(|value| value.parse().ok());
+            *messages_sent = Some(
+                parse_value(&line, "messages_sent")
+                    .ok_or("publisher DONE missing messages_sent")?
+                    .parse()?,
+            );
+            *bytes_sent = Some(
+                parse_value(&line, "bytes_sent")
+                    .ok_or("publisher DONE missing bytes_sent")?
+                    .parse()?,
+            );
         }
         Ok(line) if line.starts_with("ERROR") => return Err(line.into()),
         Ok(_) | Err(TryRecvError::Empty) => {}
