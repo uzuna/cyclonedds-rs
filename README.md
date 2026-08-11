@@ -22,9 +22,9 @@ Rust側で直接実装しているため、IDLから生成したC構造体を経
 
 Linuxのみ。ビルド前に以下をインストールしておくこと。
 
-- **Cyclone DDS 0.10.x 系** — [releases/0.10.x](https://github.com/eclipse-cyclonedds/cyclonedds/tree/releases/0.10.x)
-  （検証済み: [76360fb](https://github.com/eclipse-cyclonedds/cyclonedds/commit/76360fb73907ce3dba397e89090a7a4ecf4f1246)）。
-  SHM有効でビルドする: `cmake -DENABLE_SHM=1 ..`
+- **Cyclone DDS 11.0.0** — [11.0.0](https://github.com/eclipse-cyclonedds/cyclonedds/releases/tag/11.0.0)
+  （検証済み: [1f7f75c](https://github.com/eclipse-cyclonedds/cyclonedds/commit/1f7f75c0fa7fc9070dafaea43e14924d2537b59e)）。
+  PSMX/Iceoryx有効でビルドする: `cmake -DENABLE_ICEORYX=YES ..`
 - **iceoryx 2.0.2** — [f756b7c](https://github.com/eclipse-iceoryx/iceoryx/commit/f756b7c99ddf714d05929374492b34c5c69355bb)。
   他のバージョンは使わないこと
 - git / cmake / make / libclang / C・C++コンパイラ（cmakeとbindgenが使う）
@@ -224,7 +224,7 @@ float64 y
 | --- | --- | --- |
 | `#[cdds(package = "...")]` | struct | パッケージ名。型名は `"{package}/{name}"` になる。`DdsInterface` では必須（REP 144準拠の小文字snake_case） |
 | `#[cdds(name = "...")]` | struct | ワイヤ上の型名の上書き。省略時はRustのstruct名（UpperCamelCase必須） |
-| `#[cdds(fixed_size)]` | struct | 固定長トピックであることを示す。iceoryx転送時にCDRシリアライズを省く |
+| `#[cdds(fixed_size)]` | struct | 固定長トピックであることを示す。型のサイズ制約を検査する |
 | `#[topic_key]` | field | キーフィールド。プリミティブ・`[プリミティブ; N]`・`Topic` を derive した構造体が使える |
 | `#[topic_key_enum]` | field | キーが列挙型であることを示す（プリミティブとして扱う） |
 
@@ -238,7 +238,7 @@ float64 y
 | [monitor](cyclonedds/examples/monitor.rs) | `cargo run --example monitor` | builtinトピックでpublicationの生成/破棄を監視する |
 | [dump_interfaces](cyclonedds/examples/dump_interfaces.rs) | `cargo run --example dump_interfaces --features derive` | `DdsInterface` からIDL/`.msg` 定義をダンプする |
 
-`pubsub` に `-s` を付けると共有メモリ転送の設定
+`pubsub` に `-s` を付けると PSMX/Iceoryx 共有メモリ転送の設定
 ([cyclonedds/testdata/cyclonedds_shm.xml](cyclonedds/testdata/cyclonedds_shm.xml)) を使う。別途 `iox-roudi` の起動が必要。
 
 ## ドキュメント

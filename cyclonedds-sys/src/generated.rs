@@ -159,6 +159,11 @@ pub const DDS_TOPIC_FIXED_SIZE: u32 = 16;
 pub const DDS_TOPIC_FIXED_KEY_XCDR2: u32 = 32;
 pub const DDS_TOPIC_XTYPES_METADATA: u32 = 64;
 pub const DDS_TOPIC_RESTRICT_DATA_REPRESENTATION: u32 = 128;
+pub const DDS_TOPIC_KEY_MUTABLE: u32 = 256;
+pub const DDS_TOPIC_KEY_APPENDABLE: u32 = 512;
+pub const DDS_TOPIC_FIXED_KEY_XCDR2_KEYHASH: u32 = 1024;
+pub const DDS_TOPIC_KEY_SEQUENCE: u32 = 2048;
+pub const DDS_TOPIC_KEY_ARRAY_NONPRIM: u32 = 4096;
 pub const DDS_READ_SAMPLE_STATE: u32 = 1;
 pub const DDS_NOT_READ_SAMPLE_STATE: u32 = 2;
 pub const DDS_ANY_SAMPLE_STATE: u32 = 3;
@@ -193,6 +198,21 @@ pub const DDS_BUILTIN_TOPIC_PARTICIPANT_PROPERTY_NETWORKADDRESSES: &::std::ffi::
     c"__NetworkAddresses";
 pub const DDS_BUILTIN_TOPIC_PARTICIPANT_DEBUG_MONITOR: &::std::ffi::CStr = c"__DebugMonitor";
 pub type dds_entity_t = i32;
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct dds_builtintopic_guid {
+    pub v: [u8; 16usize],
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_builtintopic_guid"][::std::mem::size_of::<dds_builtintopic_guid>() - 16usize];
+    ["Alignment of dds_builtintopic_guid"]
+        [::std::mem::align_of::<dds_builtintopic_guid>() - 1usize];
+    ["Offset of field: dds_builtintopic_guid::v"]
+        [::std::mem::offset_of!(dds_builtintopic_guid, v) - 0usize];
+};
+pub type dds_builtintopic_guid_t = dds_builtintopic_guid;
+pub type dds_guid_t = dds_builtintopic_guid;
 pub type dds_time_t = i64;
 pub type dds_duration_t = i64;
 #[repr(C)]
@@ -249,6 +269,7 @@ pub const DDS_OP_PLC: dds_stream_opcode = 83886080;
 pub const DDS_OP_PLM: dds_stream_opcode = 100663296;
 pub const DDS_OP_KOF: dds_stream_opcode = 117440512;
 pub const DDS_OP_JEQ4: dds_stream_opcode = 134217728;
+pub const DDS_OP_MID: dds_stream_opcode = 150994944;
 pub type dds_stream_opcode = ::std::os::raw::c_uint;
 pub const DDS_OP_VAL_1BY: dds_stream_typecode = 1;
 pub const DDS_OP_VAL_2BY: dds_stream_typecode = 2;
@@ -265,6 +286,9 @@ pub const DDS_OP_VAL_ENU: dds_stream_typecode = 12;
 pub const DDS_OP_VAL_EXT: dds_stream_typecode = 13;
 pub const DDS_OP_VAL_BLN: dds_stream_typecode = 14;
 pub const DDS_OP_VAL_BMK: dds_stream_typecode = 15;
+pub const DDS_OP_VAL_WSTR: dds_stream_typecode = 16;
+pub const DDS_OP_VAL_BWSTR: dds_stream_typecode = 17;
+pub const DDS_OP_VAL_WCHAR: dds_stream_typecode = 18;
 pub type dds_stream_typecode = ::std::os::raw::c_uint;
 pub const DDS_OP_TYPE_1BY: dds_stream_typecode_primary = 65536;
 pub const DDS_OP_TYPE_2BY: dds_stream_typecode_primary = 131072;
@@ -281,6 +305,9 @@ pub const DDS_OP_TYPE_ENU: dds_stream_typecode_primary = 786432;
 pub const DDS_OP_TYPE_EXT: dds_stream_typecode_primary = 851968;
 pub const DDS_OP_TYPE_BLN: dds_stream_typecode_primary = 917504;
 pub const DDS_OP_TYPE_BMK: dds_stream_typecode_primary = 983040;
+pub const DDS_OP_TYPE_WSTR: dds_stream_typecode_primary = 1048576;
+pub const DDS_OP_TYPE_BWSTR: dds_stream_typecode_primary = 1114112;
+pub const DDS_OP_TYPE_WCHAR: dds_stream_typecode_primary = 1179648;
 pub type dds_stream_typecode_primary = ::std::os::raw::c_uint;
 pub const DDS_OP_SUBTYPE_1BY: dds_stream_typecode_subtype = 256;
 pub const DDS_OP_SUBTYPE_2BY: dds_stream_typecode_subtype = 512;
@@ -296,6 +323,9 @@ pub const DDS_OP_SUBTYPE_BSQ: dds_stream_typecode_subtype = 2816;
 pub const DDS_OP_SUBTYPE_ENU: dds_stream_typecode_subtype = 3072;
 pub const DDS_OP_SUBTYPE_BLN: dds_stream_typecode_subtype = 3584;
 pub const DDS_OP_SUBTYPE_BMK: dds_stream_typecode_subtype = 3840;
+pub const DDS_OP_SUBTYPE_WSTR: dds_stream_typecode_subtype = 4096;
+pub const DDS_OP_SUBTYPE_BWSTR: dds_stream_typecode_subtype = 4352;
+pub const DDS_OP_SUBTYPE_WCHAR: dds_stream_typecode_subtype = 4608;
 pub type dds_stream_typecode_subtype = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -328,7 +358,7 @@ pub type dds_key_descriptor_t = dds_key_descriptor;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct dds_type_meta_ser {
-    pub data: *mut ::std::os::raw::c_uchar,
+    pub data: *const ::std::os::raw::c_uchar,
     pub sz: u32,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
@@ -607,11 +637,28 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
+    pub fn dds_qset_prop_propagate(
+        qos: *mut dds_qos_t,
+        name: *const ::std::os::raw::c_char,
+        value: *const ::std::os::raw::c_char,
+        propagate: bool,
+    );
+}
+unsafe extern "C" {
     pub fn dds_qset_bprop(
         qos: *mut dds_qos_t,
         name: *const ::std::os::raw::c_char,
         value: *const ::std::os::raw::c_void,
         sz: usize,
+    );
+}
+unsafe extern "C" {
+    pub fn dds_qset_bprop_propagate(
+        qos: *mut dds_qos_t,
+        name: *const ::std::os::raw::c_char,
+        value: *const ::std::os::raw::c_void,
+        sz: usize,
+        propagate: bool,
     );
 }
 unsafe extern "C" {
@@ -634,6 +681,13 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn dds_qset_entity_name(qos: *mut dds_qos_t, name: *const ::std::os::raw::c_char);
+}
+unsafe extern "C" {
+    pub fn dds_qset_psmx_instances(
+        qos: *mut dds_qos_t,
+        n: u32,
+        values: *mut *const ::std::os::raw::c_char,
+    );
 }
 unsafe extern "C" {
     pub fn dds_qget_userdata(
@@ -776,6 +830,14 @@ unsafe extern "C" {
     ) -> bool;
 }
 unsafe extern "C" {
+    pub fn dds_qget_prop_propagate(
+        qos: *const dds_qos_t,
+        name: *const ::std::os::raw::c_char,
+        value: *mut *mut ::std::os::raw::c_char,
+        propagate: *mut bool,
+    ) -> bool;
+}
+unsafe extern "C" {
     pub fn dds_qget_bpropnames(
         qos: *const dds_qos_t,
         n: *mut u32,
@@ -788,6 +850,15 @@ unsafe extern "C" {
         name: *const ::std::os::raw::c_char,
         value: *mut *mut ::std::os::raw::c_void,
         sz: *mut usize,
+    ) -> bool;
+}
+unsafe extern "C" {
+    pub fn dds_qget_bprop_propagate(
+        qos: *const dds_qos_t,
+        name: *const ::std::os::raw::c_char,
+        value: *mut *mut ::std::os::raw::c_void,
+        sz: *mut usize,
+        propagate: *mut bool,
     ) -> bool;
 }
 unsafe extern "C" {
@@ -812,6 +883,13 @@ unsafe extern "C" {
     pub fn dds_qget_entity_name(
         qos: *const dds_qos_t,
         name: *mut *mut ::std::os::raw::c_char,
+    ) -> bool;
+}
+unsafe extern "C" {
+    pub fn dds_qget_psmx_instances(
+        qos: *const dds_qos_t,
+        n_out: *mut u32,
+        values: *mut *mut *mut ::std::os::raw::c_char,
     ) -> bool;
 }
 #[repr(C)]
@@ -1444,15 +1522,59 @@ unsafe extern "C" {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+pub struct ddsi_typeinfo {
+    _unused: [u8; 0],
+}
+unsafe extern "C" {
+    pub fn dds_request_loan(
+        entity: dds_entity_t,
+        sample: *mut *mut ::std::os::raw::c_void,
+    ) -> dds_return_t;
+}
+unsafe extern "C" {
+    pub fn dds_return_loan(
+        entity: dds_entity_t,
+        buf: *mut *mut ::std::os::raw::c_void,
+        bufsz: i32,
+    ) -> dds_return_t;
+}
+unsafe extern "C" {
+    pub fn dds_loan_sample(
+        writer: dds_entity_t,
+        sample: *mut *mut ::std::os::raw::c_void,
+    ) -> dds_return_t;
+}
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum dds_qos_kind {
+    DDS_PARTICIPANT_QOS = 0,
+    DDS_PUBLISHER_QOS = 1,
+    DDS_SUBSCRIBER_QOS = 2,
+    DDS_TOPIC_QOS = 3,
+    DDS_READER_QOS = 4,
+    DDS_WRITER_QOS = 5,
+}
+pub use self::dds_qos_kind as dds_qos_kind_t;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_qos_provider {
+    _unused: [u8; 0],
+}
+pub type dds_qos_provider_t = dds_qos_provider;
+unsafe extern "C" {
+    pub fn dds_qos_provider_get_qos(
+        provider: *const dds_qos_provider_t,
+        type_: dds_qos_kind_t,
+        key: *const ::std::os::raw::c_char,
+        qos: *mut *const dds_qos_t,
+    ) -> dds_return_t;
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct ddsi_typeid {
     _unused: [u8; 0],
 }
 pub type dds_typeid_t = ddsi_typeid;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ddsi_typeinfo {
-    _unused: [u8; 0],
-}
 pub type dds_typeinfo_t = ddsi_typeinfo;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1547,21 +1669,6 @@ impl Default for dds_sample_info {
     }
 }
 pub type dds_sample_info_t = dds_sample_info;
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct dds_builtintopic_guid {
-    pub v: [u8; 16usize],
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of dds_builtintopic_guid"][::std::mem::size_of::<dds_builtintopic_guid>() - 16usize];
-    ["Alignment of dds_builtintopic_guid"]
-        [::std::mem::align_of::<dds_builtintopic_guid>() - 1usize];
-    ["Offset of field: dds_builtintopic_guid::v"]
-        [::std::mem::offset_of!(dds_builtintopic_guid, v) - 0usize];
-};
-pub type dds_builtintopic_guid_t = dds_builtintopic_guid;
-pub type dds_guid_t = dds_builtintopic_guid;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct dds_builtintopic_participant {
@@ -1712,9 +1819,6 @@ unsafe extern "C" {
     pub fn dds_get_status_mask(entity: dds_entity_t, mask: *mut u32) -> dds_return_t;
 }
 unsafe extern "C" {
-    pub fn dds_get_enabled_status(entity: dds_entity_t, mask: *mut u32) -> dds_return_t;
-}
-unsafe extern "C" {
     pub fn dds_set_status_mask(entity: dds_entity_t, mask: u32) -> dds_return_t;
 }
 unsafe extern "C" {
@@ -1812,7 +1916,6 @@ pub type dds_topic_filter_sample_sampleinfo_arg_fn = ::std::option::Option<
         arg: *mut ::std::os::raw::c_void,
     ) -> bool,
 >;
-pub type dds_topic_filter_fn = dds_topic_filter_sample_fn;
 pub type dds_topic_filter_arg_fn = dds_topic_filter_sample_arg_fn;
 pub const DDS_TOPIC_FILTER_NONE: dds_topic_filter_mode = 0;
 pub const DDS_TOPIC_FILTER_SAMPLE: dds_topic_filter_mode = 1;
@@ -1879,9 +1982,6 @@ impl Default for dds_topic_filter {
     }
 }
 unsafe extern "C" {
-    pub fn dds_get_topic_filter(topic: dds_entity_t) -> dds_topic_filter_fn;
-}
-unsafe extern "C" {
     pub fn dds_get_topic_filter_and_arg(
         topic: dds_entity_t,
         fn_: *mut dds_topic_filter_arg_fn,
@@ -1928,7 +2028,7 @@ unsafe extern "C" {
     pub fn dds_write(writer: dds_entity_t, data: *const ::std::os::raw::c_void) -> dds_return_t;
 }
 unsafe extern "C" {
-    pub fn dds_write_flush(writer: dds_entity_t);
+    pub fn dds_write_flush(entity: dds_entity_t) -> dds_return_t;
 }
 unsafe extern "C" {
     pub fn dds_writecdr(writer: dds_entity_t, serdata: *mut ddsi_serdata) -> dds_return_t;
@@ -1954,7 +2054,7 @@ unsafe extern "C" {
 }
 pub type dds_attach_t = isize;
 unsafe extern "C" {
-    pub fn dds_create_waitset(participant: dds_entity_t) -> dds_entity_t;
+    pub fn dds_create_waitset(owner: dds_entity_t) -> dds_entity_t;
 }
 unsafe extern "C" {
     pub fn dds_waitset_get_entities(
@@ -2069,6 +2169,20 @@ unsafe extern "C" {
     ) -> dds_return_t;
 }
 unsafe extern "C" {
+    pub fn dds_read_next(
+        reader: dds_entity_t,
+        buf: *mut *mut ::std::os::raw::c_void,
+        si: *mut dds_sample_info_t,
+    ) -> dds_return_t;
+}
+unsafe extern "C" {
+    pub fn dds_read_next_wl(
+        reader: dds_entity_t,
+        buf: *mut *mut ::std::os::raw::c_void,
+        si: *mut dds_sample_info_t,
+    ) -> dds_return_t;
+}
+unsafe extern "C" {
     pub fn dds_take(
         reader_or_condition: dds_entity_t,
         buf: *mut *mut ::std::os::raw::c_void,
@@ -2101,24 +2215,6 @@ unsafe extern "C" {
         buf: *mut *mut ::std::os::raw::c_void,
         si: *mut dds_sample_info_t,
         maxs: u32,
-        mask: u32,
-    ) -> dds_return_t;
-}
-unsafe extern "C" {
-    pub fn dds_readcdr(
-        reader_or_condition: dds_entity_t,
-        buf: *mut *mut ddsi_serdata,
-        maxs: u32,
-        si: *mut dds_sample_info_t,
-        mask: u32,
-    ) -> dds_return_t;
-}
-unsafe extern "C" {
-    pub fn dds_takecdr(
-        reader_or_condition: dds_entity_t,
-        buf: *mut *mut ddsi_serdata,
-        maxs: u32,
-        si: *mut dds_sample_info_t,
         mask: u32,
     ) -> dds_return_t;
 }
@@ -2176,25 +2272,50 @@ unsafe extern "C" {
         si: *mut dds_sample_info_t,
     ) -> dds_return_t;
 }
+pub type dds_read_with_collector_fn_t = ::std::option::Option<
+    unsafe extern "C" fn(
+        arg: *mut ::std::os::raw::c_void,
+        si: *const dds_sample_info_t,
+        st: *const ddsi_sertype,
+        sd: *mut ddsi_serdata,
+    ) -> dds_return_t,
+>;
 unsafe extern "C" {
-    pub fn dds_read_next(
-        reader: dds_entity_t,
-        buf: *mut *mut ::std::os::raw::c_void,
-        si: *mut dds_sample_info_t,
+    pub fn dds_read_with_collector(
+        reader_or_condition: dds_entity_t,
+        maxs: u32,
+        handle: dds_instance_handle_t,
+        mask: u32,
+        collect_sample: dds_read_with_collector_fn_t,
+        collect_sample_arg: *mut ::std::os::raw::c_void,
     ) -> dds_return_t;
 }
 unsafe extern "C" {
-    pub fn dds_read_next_wl(
-        reader: dds_entity_t,
-        buf: *mut *mut ::std::os::raw::c_void,
-        si: *mut dds_sample_info_t,
+    pub fn dds_take_with_collector(
+        reader_or_condition: dds_entity_t,
+        maxs: u32,
+        handle: dds_instance_handle_t,
+        mask: u32,
+        collect_sample: dds_read_with_collector_fn_t,
+        collect_sample_arg: *mut ::std::os::raw::c_void,
     ) -> dds_return_t;
 }
 unsafe extern "C" {
-    pub fn dds_return_loan(
-        entity: dds_entity_t,
-        buf: *mut *mut ::std::os::raw::c_void,
-        bufsz: i32,
+    pub fn dds_readcdr(
+        reader_or_condition: dds_entity_t,
+        buf: *mut *mut ddsi_serdata,
+        maxs: u32,
+        si: *mut dds_sample_info_t,
+        mask: u32,
+    ) -> dds_return_t;
+}
+unsafe extern "C" {
+    pub fn dds_takecdr(
+        reader_or_condition: dds_entity_t,
+        buf: *mut *mut ddsi_serdata,
+        maxs: u32,
+        si: *mut dds_sample_info_t,
+        mask: u32,
     ) -> dds_return_t;
 }
 unsafe extern "C" {
@@ -2249,6 +2370,12 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn dds_free_typeinfo(type_info: *mut dds_typeinfo_t) -> dds_return_t;
 }
+unsafe extern "C" {
+    pub fn dds_get_entity_sertype(
+        entity: dds_entity_t,
+        sertype: *mut *const ddsi_sertype,
+    ) -> dds_return_t;
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct iovec {
@@ -2301,76 +2428,21 @@ const _: () = {
 };
 pub type ddsrt_atomic_voidp_t = ddsrt_atomic_uintptr_t;
 #[repr(C)]
-#[derive(Copy, Clone)]
-pub union ddsi_guid_prefix {
-    pub s: [::std::os::raw::c_uchar; 12usize],
-    pub u: [u32; 3usize],
+#[derive(Debug, Default, Copy, Clone)]
+pub struct ddsi_locator {
+    pub kind: i32,
+    pub port: u32,
+    pub address: [::std::os::raw::c_uchar; 16usize],
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of ddsi_guid_prefix"][::std::mem::size_of::<ddsi_guid_prefix>() - 12usize];
-    ["Alignment of ddsi_guid_prefix"][::std::mem::align_of::<ddsi_guid_prefix>() - 4usize];
-    ["Offset of field: ddsi_guid_prefix::s"][::std::mem::offset_of!(ddsi_guid_prefix, s) - 0usize];
-    ["Offset of field: ddsi_guid_prefix::u"][::std::mem::offset_of!(ddsi_guid_prefix, u) - 0usize];
+    ["Size of ddsi_locator"][::std::mem::size_of::<ddsi_locator>() - 24usize];
+    ["Alignment of ddsi_locator"][::std::mem::align_of::<ddsi_locator>() - 4usize];
+    ["Offset of field: ddsi_locator::kind"][::std::mem::offset_of!(ddsi_locator, kind) - 0usize];
+    ["Offset of field: ddsi_locator::port"][::std::mem::offset_of!(ddsi_locator, port) - 4usize];
+    ["Offset of field: ddsi_locator::address"]
+        [::std::mem::offset_of!(ddsi_locator, address) - 8usize];
 };
-impl Default for ddsi_guid_prefix {
-    fn default() -> Self {
-        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
-        unsafe {
-            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
-            s.assume_init()
-        }
-    }
-}
-pub type ddsi_guid_prefix_t = ddsi_guid_prefix;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union ddsi_entityid {
-    pub u: u32,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ddsi_entityid"][::std::mem::size_of::<ddsi_entityid>() - 4usize];
-    ["Alignment of ddsi_entityid"][::std::mem::align_of::<ddsi_entityid>() - 4usize];
-    ["Offset of field: ddsi_entityid::u"][::std::mem::offset_of!(ddsi_entityid, u) - 0usize];
-};
-impl Default for ddsi_entityid {
-    fn default() -> Self {
-        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
-        unsafe {
-            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
-            s.assume_init()
-        }
-    }
-}
-pub type ddsi_entityid_t = ddsi_entityid;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ddsi_guid {
-    pub prefix: ddsi_guid_prefix_t,
-    pub entityid: ddsi_entityid_t,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ddsi_guid"][::std::mem::size_of::<ddsi_guid>() - 16usize];
-    ["Alignment of ddsi_guid"][::std::mem::align_of::<ddsi_guid>() - 4usize];
-    ["Offset of field: ddsi_guid::prefix"][::std::mem::offset_of!(ddsi_guid, prefix) - 0usize];
-    ["Offset of field: ddsi_guid::entityid"][::std::mem::offset_of!(ddsi_guid, entityid) - 12usize];
-};
-impl Default for ddsi_guid {
-    fn default() -> Self {
-        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
-        unsafe {
-            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
-            s.assume_init()
-        }
-    }
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ddsi_domaingv {
-    _unused: [u8; 0],
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ddsi_octetseq {
@@ -2934,33 +3006,6 @@ const _: () = {
 };
 pub type dds_reader_data_lifecycle_qospolicy_t = dds_reader_data_lifecycle_qospolicy;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct dds_subscription_keys_qospolicy {
-    pub use_key_list: ::std::os::raw::c_uchar,
-    pub key_list: ddsi_stringseq_t,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of dds_subscription_keys_qospolicy"]
-        [::std::mem::size_of::<dds_subscription_keys_qospolicy>() - 24usize];
-    ["Alignment of dds_subscription_keys_qospolicy"]
-        [::std::mem::align_of::<dds_subscription_keys_qospolicy>() - 8usize];
-    ["Offset of field: dds_subscription_keys_qospolicy::use_key_list"]
-        [::std::mem::offset_of!(dds_subscription_keys_qospolicy, use_key_list) - 0usize];
-    ["Offset of field: dds_subscription_keys_qospolicy::key_list"]
-        [::std::mem::offset_of!(dds_subscription_keys_qospolicy, key_list) - 8usize];
-};
-impl Default for dds_subscription_keys_qospolicy {
-    fn default() -> Self {
-        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
-        unsafe {
-            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
-            s.assume_init()
-        }
-    }
-}
-pub type dds_subscription_keys_qospolicy_t = dds_subscription_keys_qospolicy;
-#[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct dds_reader_lifespan_qospolicy {
     pub use_lifespan: ::std::os::raw::c_uchar,
@@ -3071,7 +3116,6 @@ impl Default for dds_type_consistency_enforcement_qospolicy {
     }
 }
 pub type dds_type_consistency_enforcement_qospolicy_t = dds_type_consistency_enforcement_qospolicy;
-pub type dds_locator_mask_t = u32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct dds_data_representation_id_seq {
@@ -3123,6 +3167,7 @@ impl Default for dds_data_representation_qospolicy {
     }
 }
 pub type dds_data_representation_qospolicy_t = dds_data_representation_qospolicy;
+pub type dds_pubsub_message_exchange_qospolicy_t = ddsi_stringseq_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct dds_qos {
@@ -3154,18 +3199,17 @@ pub struct dds_qos {
     pub time_based_filter: dds_time_based_filter_qospolicy_t,
     pub writer_data_lifecycle: dds_writer_data_lifecycle_qospolicy_t,
     pub reader_data_lifecycle: dds_reader_data_lifecycle_qospolicy_t,
-    pub subscription_keys: dds_subscription_keys_qospolicy_t,
     pub reader_lifespan: dds_reader_lifespan_qospolicy_t,
     pub writer_batching: dds_writer_batching_qospolicy_t,
     pub ignorelocal: dds_ignorelocal_qospolicy_t,
     pub property: dds_property_qospolicy_t,
     pub type_consistency: dds_type_consistency_enforcement_qospolicy_t,
-    pub ignore_locator_type: dds_locator_mask_t,
+    pub psmx: dds_pubsub_message_exchange_qospolicy_t,
     pub data_representation: dds_data_representation_qospolicy_t,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of dds_qos"][::std::mem::size_of::<dds_qos>() - 408usize];
+    ["Size of dds_qos"][::std::mem::size_of::<dds_qos>() - 400usize];
     ["Alignment of dds_qos"][::std::mem::align_of::<dds_qos>() - 8usize];
     ["Offset of field: dds_qos::present"][::std::mem::offset_of!(dds_qos, present) - 0usize];
     ["Offset of field: dds_qos::aliased"][::std::mem::offset_of!(dds_qos, aliased) - 8usize];
@@ -3211,21 +3255,18 @@ const _: () = {
         [::std::mem::offset_of!(dds_qos, writer_data_lifecycle) - 272usize];
     ["Offset of field: dds_qos::reader_data_lifecycle"]
         [::std::mem::offset_of!(dds_qos, reader_data_lifecycle) - 280usize];
-    ["Offset of field: dds_qos::subscription_keys"]
-        [::std::mem::offset_of!(dds_qos, subscription_keys) - 296usize];
     ["Offset of field: dds_qos::reader_lifespan"]
-        [::std::mem::offset_of!(dds_qos, reader_lifespan) - 320usize];
+        [::std::mem::offset_of!(dds_qos, reader_lifespan) - 296usize];
     ["Offset of field: dds_qos::writer_batching"]
-        [::std::mem::offset_of!(dds_qos, writer_batching) - 336usize];
+        [::std::mem::offset_of!(dds_qos, writer_batching) - 312usize];
     ["Offset of field: dds_qos::ignorelocal"]
-        [::std::mem::offset_of!(dds_qos, ignorelocal) - 340usize];
-    ["Offset of field: dds_qos::property"][::std::mem::offset_of!(dds_qos, property) - 344usize];
+        [::std::mem::offset_of!(dds_qos, ignorelocal) - 316usize];
+    ["Offset of field: dds_qos::property"][::std::mem::offset_of!(dds_qos, property) - 320usize];
     ["Offset of field: dds_qos::type_consistency"]
-        [::std::mem::offset_of!(dds_qos, type_consistency) - 376usize];
-    ["Offset of field: dds_qos::ignore_locator_type"]
-        [::std::mem::offset_of!(dds_qos, ignore_locator_type) - 388usize];
+        [::std::mem::offset_of!(dds_qos, type_consistency) - 352usize];
+    ["Offset of field: dds_qos::psmx"][::std::mem::offset_of!(dds_qos, psmx) - 368usize];
     ["Offset of field: dds_qos::data_representation"]
-        [::std::mem::offset_of!(dds_qos, data_representation) - 392usize];
+        [::std::mem::offset_of!(dds_qos, data_representation) - 384usize];
 };
 impl Default for dds_qos {
     fn default() -> Self {
@@ -3236,6 +3277,11 @@ impl Default for dds_qos {
         }
     }
 }
+pub type dds_data_type_properties_t = u64;
+pub const DDS_CDR_TYPE_EXT_FINAL: dds_cdr_type_extensibility = 0;
+pub const DDS_CDR_TYPE_EXT_APPENDABLE: dds_cdr_type_extensibility = 1;
+pub const DDS_CDR_TYPE_EXT_MUTABLE: dds_cdr_type_extensibility = 2;
+pub type dds_cdr_type_extensibility = ::std::os::raw::c_uint;
 pub type ddsi_typeid_t = ddsi_typeid;
 pub type ddsi_typeinfo_t = ddsi_typeinfo;
 #[repr(C)]
@@ -3249,8 +3295,18 @@ pub const DDSI_TYPEID_KIND_COMPLETE: ddsi_typeid_kind = 1;
 pub const DDSI_TYPEID_KIND_PLAIN_COLLECTION_MINIMAL: ddsi_typeid_kind = 2;
 pub const DDSI_TYPEID_KIND_PLAIN_COLLECTION_COMPLETE: ddsi_typeid_kind = 3;
 pub const DDSI_TYPEID_KIND_FULLY_DESCRIPTIVE: ddsi_typeid_kind = 4;
+pub const DDSI_TYPEID_KIND_INVALID: ddsi_typeid_kind = 5;
 pub type ddsi_typeid_kind = ::std::os::raw::c_uint;
 pub use self::ddsi_typeid_kind as ddsi_typeid_kind_t;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ddsi_domaingv {
+    _unused: [u8; 0],
+}
+pub const SDK_EMPTY: ddsi_serdata_kind = 0;
+pub const SDK_KEY: ddsi_serdata_kind = 1;
+pub const SDK_DATA: ddsi_serdata_kind = 2;
+pub type ddsi_serdata_kind = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ddsi_sertype {
@@ -3264,8 +3320,8 @@ pub struct ddsi_sertype {
     pub gv: ddsrt_atomic_voidp_t,
     pub flags_refc: ddsrt_atomic_uint32_t,
     pub base_sertype: *const ddsi_sertype,
-    pub wrapped_sertopic: *mut ::std::os::raw::c_void,
-    pub iox_size: u32,
+    pub sizeof_type: u32,
+    pub data_type_props: dds_data_type_properties_t,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -3285,10 +3341,10 @@ const _: () = {
         [::std::mem::offset_of!(ddsi_sertype, flags_refc) - 48usize];
     ["Offset of field: ddsi_sertype::base_sertype"]
         [::std::mem::offset_of!(ddsi_sertype, base_sertype) - 56usize];
-    ["Offset of field: ddsi_sertype::wrapped_sertopic"]
-        [::std::mem::offset_of!(ddsi_sertype, wrapped_sertopic) - 64usize];
-    ["Offset of field: ddsi_sertype::iox_size"]
-        [::std::mem::offset_of!(ddsi_sertype, iox_size) - 72usize];
+    ["Offset of field: ddsi_sertype::sizeof_type"]
+        [::std::mem::offset_of!(ddsi_sertype, sizeof_type) - 64usize];
+    ["Offset of field: ddsi_sertype::data_type_props"]
+        [::std::mem::offset_of!(ddsi_sertype, data_type_props) - 72usize];
 };
 impl Default for ddsi_sertype {
     fn default() -> Self {
@@ -3301,18 +3357,18 @@ impl Default for ddsi_sertype {
 }
 impl ddsi_sertype {
     #[inline]
-    pub fn typekind_no_key(&self) -> u32 {
+    pub fn has_key(&self) -> u32 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u32) }
     }
     #[inline]
-    pub fn set_typekind_no_key(&mut self, val: u32) {
+    pub fn set_has_key(&mut self, val: u32) {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(0usize, 1u8, val as u64)
         }
     }
     #[inline]
-    pub unsafe fn typekind_no_key_raw(this: *const Self) -> u32 {
+    pub unsafe fn has_key_raw(this: *const Self) -> u32 {
         unsafe {
             ::std::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::std::ptr::addr_of!((*this)._bitfield_1),
@@ -3322,7 +3378,7 @@ impl ddsi_sertype {
         }
     }
     #[inline]
-    pub unsafe fn set_typekind_no_key_raw(this: *mut Self, val: u32) {
+    pub unsafe fn set_has_key_raw(this: *mut Self, val: u32) {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
@@ -3367,18 +3423,18 @@ impl ddsi_sertype {
         }
     }
     #[inline]
-    pub fn fixed_size(&self) -> u32 {
+    pub fn is_memcpy_safe(&self) -> u32 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(2usize, 1u8) as u32) }
     }
     #[inline]
-    pub fn set_fixed_size(&mut self, val: u32) {
+    pub fn set_is_memcpy_safe(&mut self, val: u32) {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(2usize, 1u8, val as u64)
         }
     }
     #[inline]
-    pub unsafe fn fixed_size_raw(this: *const Self) -> u32 {
+    pub unsafe fn is_memcpy_safe_raw(this: *const Self) -> u32 {
         unsafe {
             ::std::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::std::ptr::addr_of!((*this)._bitfield_1),
@@ -3388,7 +3444,7 @@ impl ddsi_sertype {
         }
     }
     #[inline]
-    pub unsafe fn set_fixed_size_raw(this: *mut Self, val: u32) {
+    pub unsafe fn set_is_memcpy_safe_raw(this: *mut Self, val: u32) {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
@@ -3401,22 +3457,22 @@ impl ddsi_sertype {
     }
     #[inline]
     pub fn new_bitfield_1(
-        typekind_no_key: u32,
+        has_key: u32,
         request_keyhash: u32,
-        fixed_size: u32,
+        is_memcpy_safe: u32,
     ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
         let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
         __bindgen_bitfield_unit.set(0usize, 1u8, {
-            let typekind_no_key: u32 = unsafe { ::std::mem::transmute(typekind_no_key) };
-            typekind_no_key as u64
+            let has_key: u32 = unsafe { ::std::mem::transmute(has_key) };
+            has_key as u64
         });
         __bindgen_bitfield_unit.set(1usize, 1u8, {
             let request_keyhash: u32 = unsafe { ::std::mem::transmute(request_keyhash) };
             request_keyhash as u64
         });
         __bindgen_bitfield_unit.set(2usize, 1u8, {
-            let fixed_size: u32 = unsafe { ::std::mem::transmute(fixed_size) };
-            fixed_size as u64
+            let is_memcpy_safe: u32 = unsafe { ::std::mem::transmute(is_memcpy_safe) };
+            is_memcpy_safe as u64
         });
         __bindgen_bitfield_unit
     }
@@ -3455,11 +3511,18 @@ pub type ddsi_sertype_typeid_t = ::std::option::Option<
     unsafe extern "C" fn(tp: *const ddsi_sertype, kind: ddsi_typeid_kind_t) -> *mut ddsi_typeid_t,
 >;
 pub type ddsi_sertype_get_serialized_size_t = ::std::option::Option<
-    unsafe extern "C" fn(d: *const ddsi_sertype, sample: *const ::std::os::raw::c_void) -> usize,
+    unsafe extern "C" fn(
+        tp: *const ddsi_sertype,
+        sdkind: ddsi_serdata_kind,
+        sample: *const ::std::os::raw::c_void,
+        size: *mut usize,
+        enc_identifier: *mut u16,
+    ) -> dds_return_t,
 >;
 pub type ddsi_sertype_serialize_into_t = ::std::option::Option<
     unsafe extern "C" fn(
         d: *const ddsi_sertype,
+        sdkind: ddsi_serdata_kind,
         sample: *const ::std::os::raw::c_void,
         dst_buffer: *mut ::std::os::raw::c_void,
         dst_size: usize,
@@ -3546,10 +3609,6 @@ impl Default for ddsi_sertype_ops {
         }
     }
 }
-pub const DDSI_SERTYPE_EXT_FINAL: ddsi_sertype_extensibility = 0;
-pub const DDSI_SERTYPE_EXT_APPENDABLE: ddsi_sertype_extensibility = 1;
-pub const DDSI_SERTYPE_EXT_MUTABLE: ddsi_sertype_extensibility = 2;
-pub type ddsi_sertype_extensibility = ::std::os::raw::c_uint;
 unsafe extern "C" {
     pub fn ddsi_sertype_lookup_locked(
         gv: *mut ddsi_domaingv,
@@ -3558,6 +3617,18 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn ddsi_sertype_register_locked(gv: *mut ddsi_domaingv, sertype: *mut ddsi_sertype);
+}
+unsafe extern "C" {
+    pub fn ddsi_sertype_init_props(
+        tp: *mut ddsi_sertype,
+        type_name: *const ::std::os::raw::c_char,
+        sertype_ops: *const ddsi_sertype_ops,
+        serdata_ops: *const ddsi_serdata_ops,
+        sizeof_type: usize,
+        data_type_props: dds_data_type_properties_t,
+        allowed_data_representation: u32,
+        flags: u32,
+    );
 }
 unsafe extern "C" {
     pub fn ddsi_sertype_init_flags(
@@ -3584,9 +3655,6 @@ unsafe extern "C" {
     pub fn ddsi_sertype_ref(tp: *const ddsi_sertype) -> *mut ddsi_sertype;
 }
 unsafe extern "C" {
-    pub fn ddsi_sertype_unref_locked(gv: *mut ddsi_domaingv, tp: *mut ddsi_sertype);
-}
-unsafe extern "C" {
     pub fn ddsi_sertype_unref(tp: *mut ddsi_sertype);
 }
 unsafe extern "C" {
@@ -3600,7 +3668,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn ddsi_sertype_extensibility_enc_format(
-        type_extensibility: ddsi_sertype_extensibility,
+        type_extensibility: dds_cdr_type_extensibility,
     ) -> u16;
 }
 unsafe extern "C" {
@@ -3624,10 +3692,6 @@ const _: () = {
     ["Offset of field: ddsi_keyhash::value"][::std::mem::offset_of!(ddsi_keyhash, value) - 0usize];
 };
 pub type ddsi_keyhash_t = ddsi_keyhash;
-pub const SDK_EMPTY: ddsi_serdata_kind = 0;
-pub const SDK_KEY: ddsi_serdata_kind = 1;
-pub const SDK_DATA: ddsi_serdata_kind = 2;
-pub type ddsi_serdata_kind = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ddsi_serdata {
@@ -3639,12 +3703,11 @@ pub struct ddsi_serdata {
     pub timestamp: ddsrt_wctime_t,
     pub statusinfo: u32,
     pub twrite: ddsrt_mtime_t,
-    pub iox_chunk: *mut ::std::os::raw::c_void,
-    pub iox_subscriber: *mut ::std::os::raw::c_void,
+    pub loan: *mut dds_loaned_sample,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of ddsi_serdata"][::std::mem::size_of::<ddsi_serdata>() - 72usize];
+    ["Size of ddsi_serdata"][::std::mem::size_of::<ddsi_serdata>() - 64usize];
     ["Alignment of ddsi_serdata"][::std::mem::align_of::<ddsi_serdata>() - 8usize];
     ["Offset of field: ddsi_serdata::ops"][::std::mem::offset_of!(ddsi_serdata, ops) - 0usize];
     ["Offset of field: ddsi_serdata::hash"][::std::mem::offset_of!(ddsi_serdata, hash) - 8usize];
@@ -3657,10 +3720,7 @@ const _: () = {
         [::std::mem::offset_of!(ddsi_serdata, statusinfo) - 40usize];
     ["Offset of field: ddsi_serdata::twrite"]
         [::std::mem::offset_of!(ddsi_serdata, twrite) - 48usize];
-    ["Offset of field: ddsi_serdata::iox_chunk"]
-        [::std::mem::offset_of!(ddsi_serdata, iox_chunk) - 56usize];
-    ["Offset of field: ddsi_serdata::iox_subscriber"]
-        [::std::mem::offset_of!(ddsi_serdata, iox_subscriber) - 64usize];
+    ["Offset of field: ddsi_serdata::loan"][::std::mem::offset_of!(ddsi_serdata, loan) - 56usize];
 };
 impl Default for ddsi_serdata {
     fn default() -> Self {
@@ -3678,7 +3738,7 @@ pub type ddsi_serdata_from_ser_t = ::std::option::Option<
     unsafe extern "C" fn(
         type_: *const ddsi_sertype,
         kind: ddsi_serdata_kind,
-        fragchain: *const nn_rdata,
+        fragchain: *const ddsi_rdata,
         size: usize,
     ) -> *mut ddsi_serdata,
 >;
@@ -3755,14 +3815,19 @@ pub type ddsi_serdata_print_t = ::std::option::Option<
 pub type ddsi_serdata_get_keyhash_t = ::std::option::Option<
     unsafe extern "C" fn(d: *const ddsi_serdata, buf: *mut ddsi_keyhash, force_md5: bool),
 >;
-pub type ddsi_serdata_iox_size_t =
-    ::std::option::Option<unsafe extern "C" fn(d: *const ddsi_serdata) -> u32>;
-pub type ddsi_serdata_from_iox_t = ::std::option::Option<
+pub type ddsi_serdata_from_loan_t = ::std::option::Option<
     unsafe extern "C" fn(
         type_: *const ddsi_sertype,
         kind: ddsi_serdata_kind,
-        sub: *mut ::std::os::raw::c_void,
-        buffer: *mut ::std::os::raw::c_void,
+        sample: *const ::std::os::raw::c_char,
+        loaned_sample: *mut dds_loaned_sample,
+        will_require_cdr: bool,
+    ) -> *mut ddsi_serdata,
+>;
+pub type ddsi_serdata_from_psmx_t = ::std::option::Option<
+    unsafe extern "C" fn(
+        type_: *const ddsi_sertype,
+        loaned_sample: *mut dds_loaned_sample,
     ) -> *mut ddsi_serdata,
 >;
 #[repr(C)]
@@ -3783,8 +3848,8 @@ pub struct ddsi_serdata_ops {
     pub free: ddsi_serdata_free_t,
     pub print: ddsi_serdata_print_t,
     pub get_keyhash: ddsi_serdata_get_keyhash_t,
-    pub get_sample_size: ddsi_serdata_iox_size_t,
-    pub from_iox_buffer: ddsi_serdata_from_iox_t,
+    pub from_loaned_sample: ddsi_serdata_from_loan_t,
+    pub from_psmx: ddsi_serdata_from_psmx_t,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -3820,21 +3885,28 @@ const _: () = {
         [::std::mem::offset_of!(ddsi_serdata_ops, print) - 104usize];
     ["Offset of field: ddsi_serdata_ops::get_keyhash"]
         [::std::mem::offset_of!(ddsi_serdata_ops, get_keyhash) - 112usize];
-    ["Offset of field: ddsi_serdata_ops::get_sample_size"]
-        [::std::mem::offset_of!(ddsi_serdata_ops, get_sample_size) - 120usize];
-    ["Offset of field: ddsi_serdata_ops::from_iox_buffer"]
-        [::std::mem::offset_of!(ddsi_serdata_ops, from_iox_buffer) - 128usize];
+    ["Offset of field: ddsi_serdata_ops::from_loaned_sample"]
+        [::std::mem::offset_of!(ddsi_serdata_ops, from_loaned_sample) - 120usize];
+    ["Offset of field: ddsi_serdata_ops::from_psmx"]
+        [::std::mem::offset_of!(ddsi_serdata_ops, from_psmx) - 128usize];
 };
 unsafe extern "C" {
     pub fn ddsi_serdata_init(
         d: *mut ddsi_serdata,
-        type_: *const ddsi_sertype,
+        tp: *const ddsi_sertype,
         kind: ddsi_serdata_kind,
     );
 }
 unsafe extern "C" {
-    pub fn ddsi_serdata_keyhash_from_fragchain(fragchain: *const nn_rdata)
-    -> *const ddsi_keyhash_t;
+    pub fn ddsi_serdata_keyhash_from_fragchain(
+        fragchain: *const ddsi_rdata,
+    ) -> *const ddsi_keyhash_t;
+}
+unsafe extern "C" {
+    pub fn ddsi_serdata_copy_as_type(
+        type_: *const ddsi_sertype,
+        serdata: *const ddsi_serdata,
+    ) -> *mut ddsi_serdata;
 }
 unsafe extern "C" {
     pub fn ddsi_serdata_ref_as_type(
@@ -3844,19 +3916,19 @@ unsafe extern "C" {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct nn_rbuf {
+pub struct ddsi_rbuf {
     _unused: [u8; 0],
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct nn_rmsg_chunk {
-    pub rbuf: *mut nn_rbuf,
-    pub next: *mut nn_rmsg_chunk,
-    pub u: nn_rmsg_chunk__bindgen_ty_1,
+pub struct ddsi_rmsg_chunk {
+    pub rbuf: *mut ddsi_rbuf,
+    pub next: *mut ddsi_rmsg_chunk,
+    pub u: ddsi_rmsg_chunk__bindgen_ty_1,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub union nn_rmsg_chunk__bindgen_ty_1 {
+pub union ddsi_rmsg_chunk__bindgen_ty_1 {
     pub size: u32,
     pub l: i64,
     pub d: f64,
@@ -3864,20 +3936,20 @@ pub union nn_rmsg_chunk__bindgen_ty_1 {
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of nn_rmsg_chunk__bindgen_ty_1"]
-        [::std::mem::size_of::<nn_rmsg_chunk__bindgen_ty_1>() - 8usize];
-    ["Alignment of nn_rmsg_chunk__bindgen_ty_1"]
-        [::std::mem::align_of::<nn_rmsg_chunk__bindgen_ty_1>() - 8usize];
-    ["Offset of field: nn_rmsg_chunk__bindgen_ty_1::size"]
-        [::std::mem::offset_of!(nn_rmsg_chunk__bindgen_ty_1, size) - 0usize];
-    ["Offset of field: nn_rmsg_chunk__bindgen_ty_1::l"]
-        [::std::mem::offset_of!(nn_rmsg_chunk__bindgen_ty_1, l) - 0usize];
-    ["Offset of field: nn_rmsg_chunk__bindgen_ty_1::d"]
-        [::std::mem::offset_of!(nn_rmsg_chunk__bindgen_ty_1, d) - 0usize];
-    ["Offset of field: nn_rmsg_chunk__bindgen_ty_1::p"]
-        [::std::mem::offset_of!(nn_rmsg_chunk__bindgen_ty_1, p) - 0usize];
+    ["Size of ddsi_rmsg_chunk__bindgen_ty_1"]
+        [::std::mem::size_of::<ddsi_rmsg_chunk__bindgen_ty_1>() - 8usize];
+    ["Alignment of ddsi_rmsg_chunk__bindgen_ty_1"]
+        [::std::mem::align_of::<ddsi_rmsg_chunk__bindgen_ty_1>() - 8usize];
+    ["Offset of field: ddsi_rmsg_chunk__bindgen_ty_1::size"]
+        [::std::mem::offset_of!(ddsi_rmsg_chunk__bindgen_ty_1, size) - 0usize];
+    ["Offset of field: ddsi_rmsg_chunk__bindgen_ty_1::l"]
+        [::std::mem::offset_of!(ddsi_rmsg_chunk__bindgen_ty_1, l) - 0usize];
+    ["Offset of field: ddsi_rmsg_chunk__bindgen_ty_1::d"]
+        [::std::mem::offset_of!(ddsi_rmsg_chunk__bindgen_ty_1, d) - 0usize];
+    ["Offset of field: ddsi_rmsg_chunk__bindgen_ty_1::p"]
+        [::std::mem::offset_of!(ddsi_rmsg_chunk__bindgen_ty_1, p) - 0usize];
 };
-impl Default for nn_rmsg_chunk__bindgen_ty_1 {
+impl Default for ddsi_rmsg_chunk__bindgen_ty_1 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -3888,13 +3960,15 @@ impl Default for nn_rmsg_chunk__bindgen_ty_1 {
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of nn_rmsg_chunk"][::std::mem::size_of::<nn_rmsg_chunk>() - 24usize];
-    ["Alignment of nn_rmsg_chunk"][::std::mem::align_of::<nn_rmsg_chunk>() - 8usize];
-    ["Offset of field: nn_rmsg_chunk::rbuf"][::std::mem::offset_of!(nn_rmsg_chunk, rbuf) - 0usize];
-    ["Offset of field: nn_rmsg_chunk::next"][::std::mem::offset_of!(nn_rmsg_chunk, next) - 8usize];
-    ["Offset of field: nn_rmsg_chunk::u"][::std::mem::offset_of!(nn_rmsg_chunk, u) - 16usize];
+    ["Size of ddsi_rmsg_chunk"][::std::mem::size_of::<ddsi_rmsg_chunk>() - 24usize];
+    ["Alignment of ddsi_rmsg_chunk"][::std::mem::align_of::<ddsi_rmsg_chunk>() - 8usize];
+    ["Offset of field: ddsi_rmsg_chunk::rbuf"]
+        [::std::mem::offset_of!(ddsi_rmsg_chunk, rbuf) - 0usize];
+    ["Offset of field: ddsi_rmsg_chunk::next"]
+        [::std::mem::offset_of!(ddsi_rmsg_chunk, next) - 8usize];
+    ["Offset of field: ddsi_rmsg_chunk::u"][::std::mem::offset_of!(ddsi_rmsg_chunk, u) - 16usize];
 };
-impl Default for nn_rmsg_chunk {
+impl Default for ddsi_rmsg_chunk {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -3905,22 +3979,23 @@ impl Default for nn_rmsg_chunk {
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct nn_rmsg {
+pub struct ddsi_rmsg {
     pub refcount: ddsrt_atomic_uint32_t,
-    pub lastchunk: *mut nn_rmsg_chunk,
+    pub lastchunk: *mut ddsi_rmsg_chunk,
     pub trace: bool,
-    pub chunk: nn_rmsg_chunk,
+    pub chunk: ddsi_rmsg_chunk,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of nn_rmsg"][::std::mem::size_of::<nn_rmsg>() - 48usize];
-    ["Alignment of nn_rmsg"][::std::mem::align_of::<nn_rmsg>() - 8usize];
-    ["Offset of field: nn_rmsg::refcount"][::std::mem::offset_of!(nn_rmsg, refcount) - 0usize];
-    ["Offset of field: nn_rmsg::lastchunk"][::std::mem::offset_of!(nn_rmsg, lastchunk) - 8usize];
-    ["Offset of field: nn_rmsg::trace"][::std::mem::offset_of!(nn_rmsg, trace) - 16usize];
-    ["Offset of field: nn_rmsg::chunk"][::std::mem::offset_of!(nn_rmsg, chunk) - 24usize];
+    ["Size of ddsi_rmsg"][::std::mem::size_of::<ddsi_rmsg>() - 48usize];
+    ["Alignment of ddsi_rmsg"][::std::mem::align_of::<ddsi_rmsg>() - 8usize];
+    ["Offset of field: ddsi_rmsg::refcount"][::std::mem::offset_of!(ddsi_rmsg, refcount) - 0usize];
+    ["Offset of field: ddsi_rmsg::lastchunk"]
+        [::std::mem::offset_of!(ddsi_rmsg, lastchunk) - 8usize];
+    ["Offset of field: ddsi_rmsg::trace"][::std::mem::offset_of!(ddsi_rmsg, trace) - 16usize];
+    ["Offset of field: ddsi_rmsg::chunk"][::std::mem::offset_of!(ddsi_rmsg, chunk) - 24usize];
 };
-impl Default for nn_rmsg {
+impl Default for ddsi_rmsg {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -3931,9 +4006,9 @@ impl Default for nn_rmsg {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct nn_rdata {
-    pub rmsg: *mut nn_rmsg,
-    pub nextfrag: *mut nn_rdata,
+pub struct ddsi_rdata {
+    pub rmsg: *mut ddsi_rmsg,
+    pub nextfrag: *mut ddsi_rdata,
     pub min: u32,
     pub maxp1: u32,
     pub submsg_zoff: u16,
@@ -3943,22 +4018,23 @@ pub struct nn_rdata {
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of nn_rdata"][::std::mem::size_of::<nn_rdata>() - 40usize];
-    ["Alignment of nn_rdata"][::std::mem::align_of::<nn_rdata>() - 8usize];
-    ["Offset of field: nn_rdata::rmsg"][::std::mem::offset_of!(nn_rdata, rmsg) - 0usize];
-    ["Offset of field: nn_rdata::nextfrag"][::std::mem::offset_of!(nn_rdata, nextfrag) - 8usize];
-    ["Offset of field: nn_rdata::min"][::std::mem::offset_of!(nn_rdata, min) - 16usize];
-    ["Offset of field: nn_rdata::maxp1"][::std::mem::offset_of!(nn_rdata, maxp1) - 20usize];
-    ["Offset of field: nn_rdata::submsg_zoff"]
-        [::std::mem::offset_of!(nn_rdata, submsg_zoff) - 24usize];
-    ["Offset of field: nn_rdata::payload_zoff"]
-        [::std::mem::offset_of!(nn_rdata, payload_zoff) - 26usize];
-    ["Offset of field: nn_rdata::keyhash_zoff"]
-        [::std::mem::offset_of!(nn_rdata, keyhash_zoff) - 28usize];
-    ["Offset of field: nn_rdata::refcount_bias_added"]
-        [::std::mem::offset_of!(nn_rdata, refcount_bias_added) - 32usize];
+    ["Size of ddsi_rdata"][::std::mem::size_of::<ddsi_rdata>() - 40usize];
+    ["Alignment of ddsi_rdata"][::std::mem::align_of::<ddsi_rdata>() - 8usize];
+    ["Offset of field: ddsi_rdata::rmsg"][::std::mem::offset_of!(ddsi_rdata, rmsg) - 0usize];
+    ["Offset of field: ddsi_rdata::nextfrag"]
+        [::std::mem::offset_of!(ddsi_rdata, nextfrag) - 8usize];
+    ["Offset of field: ddsi_rdata::min"][::std::mem::offset_of!(ddsi_rdata, min) - 16usize];
+    ["Offset of field: ddsi_rdata::maxp1"][::std::mem::offset_of!(ddsi_rdata, maxp1) - 20usize];
+    ["Offset of field: ddsi_rdata::submsg_zoff"]
+        [::std::mem::offset_of!(ddsi_rdata, submsg_zoff) - 24usize];
+    ["Offset of field: ddsi_rdata::payload_zoff"]
+        [::std::mem::offset_of!(ddsi_rdata, payload_zoff) - 26usize];
+    ["Offset of field: ddsi_rdata::keyhash_zoff"]
+        [::std::mem::offset_of!(ddsi_rdata, keyhash_zoff) - 28usize];
+    ["Offset of field: ddsi_rdata::refcount_bias_added"]
+        [::std::mem::offset_of!(ddsi_rdata, refcount_bias_added) - 32usize];
 };
-impl Default for nn_rdata {
+impl Default for ddsi_rdata {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -4010,47 +4086,54 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn ddsrt_md5_finish(pms: *mut ddsrt_md5_state_t, digest: *mut ddsrt_md5_byte_t);
 }
+pub const DDS_LOANED_SAMPLE_STATE_UNITIALIZED: dds_loaned_sample_state = 0;
+pub const DDS_LOANED_SAMPLE_STATE_RAW_KEY: dds_loaned_sample_state = 1;
+pub const DDS_LOANED_SAMPLE_STATE_RAW_DATA: dds_loaned_sample_state = 2;
+pub const DDS_LOANED_SAMPLE_STATE_SERIALIZED_KEY: dds_loaned_sample_state = 3;
+pub const DDS_LOANED_SAMPLE_STATE_SERIALIZED_DATA: dds_loaned_sample_state = 4;
+pub type dds_loaned_sample_state = ::std::os::raw::c_uint;
+pub use self::dds_loaned_sample_state as dds_loaned_sample_state_t;
+pub type dds_loan_data_type_t = u32;
+pub type dds_loaned_sample_free_f =
+    ::std::option::Option<unsafe extern "C" fn(loaned_sample: *mut dds_loaned_sample)>;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct cpp2c_Subscriber {
-    _unused: [u8; 0],
-}
-pub type iox_sub_t = *mut cpp2c_Subscriber;
-pub const IOX_CHUNK_UNINITIALIZED: iox_shm_data_state_t = 0;
-pub const IOX_CHUNK_CONTAINS_RAW_DATA: iox_shm_data_state_t = 1;
-pub const IOX_CHUNK_CONTAINS_SERIALIZED_DATA: iox_shm_data_state_t = 2;
-pub type iox_shm_data_state_t = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct iceoryx_header {
-    pub guid: ddsi_guid,
-    pub tstamp: dds_time_t,
-    pub statusinfo: u32,
-    pub data_size: u32,
-    pub data_kind: ::std::os::raw::c_uchar,
-    pub keyhash: ddsi_keyhash_t,
-    pub shm_data_state: iox_shm_data_state_t,
+#[derive(Debug, Default, Copy, Clone)]
+pub struct dds_loaned_sample_ops {
+    pub free: dds_loaned_sample_free_f,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of iceoryx_header"][::std::mem::size_of::<iceoryx_header>() - 56usize];
-    ["Alignment of iceoryx_header"][::std::mem::align_of::<iceoryx_header>() - 8usize];
-    ["Offset of field: iceoryx_header::guid"]
-        [::std::mem::offset_of!(iceoryx_header, guid) - 0usize];
-    ["Offset of field: iceoryx_header::tstamp"]
-        [::std::mem::offset_of!(iceoryx_header, tstamp) - 16usize];
-    ["Offset of field: iceoryx_header::statusinfo"]
-        [::std::mem::offset_of!(iceoryx_header, statusinfo) - 24usize];
-    ["Offset of field: iceoryx_header::data_size"]
-        [::std::mem::offset_of!(iceoryx_header, data_size) - 28usize];
-    ["Offset of field: iceoryx_header::data_kind"]
-        [::std::mem::offset_of!(iceoryx_header, data_kind) - 32usize];
-    ["Offset of field: iceoryx_header::keyhash"]
-        [::std::mem::offset_of!(iceoryx_header, keyhash) - 33usize];
-    ["Offset of field: iceoryx_header::shm_data_state"]
-        [::std::mem::offset_of!(iceoryx_header, shm_data_state) - 52usize];
+    ["Size of dds_loaned_sample_ops"][::std::mem::size_of::<dds_loaned_sample_ops>() - 8usize];
+    ["Alignment of dds_loaned_sample_ops"]
+        [::std::mem::align_of::<dds_loaned_sample_ops>() - 8usize];
+    ["Offset of field: dds_loaned_sample_ops::free"]
+        [::std::mem::offset_of!(dds_loaned_sample_ops, free) - 0usize];
 };
-impl Default for iceoryx_header {
+pub type dds_loaned_sample_ops_t = dds_loaned_sample_ops;
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum dds_loaned_sample_origin_kind {
+    DDS_LOAN_ORIGIN_KIND_HEAP = 0,
+    DDS_LOAN_ORIGIN_KIND_PSMX = 1,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_loaned_sample_origin {
+    pub origin_kind: dds_loaned_sample_origin_kind,
+    pub psmx_endpoint: *mut dds_psmx_endpoint,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_loaned_sample_origin"]
+        [::std::mem::size_of::<dds_loaned_sample_origin>() - 16usize];
+    ["Alignment of dds_loaned_sample_origin"]
+        [::std::mem::align_of::<dds_loaned_sample_origin>() - 8usize];
+    ["Offset of field: dds_loaned_sample_origin::origin_kind"]
+        [::std::mem::offset_of!(dds_loaned_sample_origin, origin_kind) - 0usize];
+    ["Offset of field: dds_loaned_sample_origin::psmx_endpoint"]
+        [::std::mem::offset_of!(dds_loaned_sample_origin, psmx_endpoint) - 8usize];
+};
+impl Default for dds_loaned_sample_origin {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -4059,33 +4142,374 @@ impl Default for iceoryx_header {
         }
     }
 }
-pub type iceoryx_header_t = iceoryx_header;
-unsafe extern "C" {
-    pub fn free_iox_chunk(iox_sub: *mut iox_sub_t, iox_chunk: *mut *mut ::std::os::raw::c_void);
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_loaned_sample {
+    pub ops: dds_loaned_sample_ops_t,
+    pub loan_origin: dds_loaned_sample_origin,
+    pub metadata: *mut dds_psmx_metadata,
+    pub sample_ptr: *mut ::std::os::raw::c_void,
+    pub refc: ddsrt_atomic_uint32_t,
 }
-unsafe extern "C" {
-    pub fn iceoryx_header_from_chunk(
-        iox_chunk: *const ::std::os::raw::c_void,
-    ) -> *mut iceoryx_header_t;
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_loaned_sample"][::std::mem::size_of::<dds_loaned_sample>() - 48usize];
+    ["Alignment of dds_loaned_sample"][::std::mem::align_of::<dds_loaned_sample>() - 8usize];
+    ["Offset of field: dds_loaned_sample::ops"]
+        [::std::mem::offset_of!(dds_loaned_sample, ops) - 0usize];
+    ["Offset of field: dds_loaned_sample::loan_origin"]
+        [::std::mem::offset_of!(dds_loaned_sample, loan_origin) - 8usize];
+    ["Offset of field: dds_loaned_sample::metadata"]
+        [::std::mem::offset_of!(dds_loaned_sample, metadata) - 24usize];
+    ["Offset of field: dds_loaned_sample::sample_ptr"]
+        [::std::mem::offset_of!(dds_loaned_sample, sample_ptr) - 32usize];
+    ["Offset of field: dds_loaned_sample::refc"]
+        [::std::mem::offset_of!(dds_loaned_sample, refc) - 40usize];
+};
+impl Default for dds_loaned_sample {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
-unsafe extern "C" {
-    pub fn dds_loan_shared_memory_buffer(
-        writer: dds_entity_t,
-        size: usize,
-        buffer: *mut *mut ::std::os::raw::c_void,
-    ) -> dds_return_t;
+pub type dds_loaned_sample_t = dds_loaned_sample;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ddsi_type {
+    _unused: [u8; 0],
 }
-unsafe extern "C" {
-    pub fn dds_loan_sample(
-        writer: dds_entity_t,
-        sample: *mut *mut ::std::os::raw::c_void,
-    ) -> dds_return_t;
+pub const DDS_PSMX_ENDPOINT_TYPE_UNSET: dds_psmx_endpoint_type = 0;
+pub const DDS_PSMX_ENDPOINT_TYPE_READER: dds_psmx_endpoint_type = 1;
+pub const DDS_PSMX_ENDPOINT_TYPE_WRITER: dds_psmx_endpoint_type = 2;
+pub type dds_psmx_endpoint_type = ::std::os::raw::c_uint;
+pub use self::dds_psmx_endpoint_type as dds_psmx_endpoint_type_t;
+pub type dds_psmx_instance_id_t = u32;
+pub type dds_psmx_features_t = u32;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_psmx_metadata {
+    pub sample_state: dds_loaned_sample_state_t,
+    pub data_type: dds_loan_data_type_t,
+    pub instance_id: dds_psmx_instance_id_t,
+    pub sample_size: u32,
+    pub guid: dds_guid_t,
+    pub timestamp: dds_time_t,
+    pub statusinfo: u32,
+    pub cdr_identifier: u16,
+    pub cdr_options: u16,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_metadata"][::std::mem::size_of::<dds_psmx_metadata>() - 48usize];
+    ["Alignment of dds_psmx_metadata"][::std::mem::align_of::<dds_psmx_metadata>() - 8usize];
+    ["Offset of field: dds_psmx_metadata::sample_state"]
+        [::std::mem::offset_of!(dds_psmx_metadata, sample_state) - 0usize];
+    ["Offset of field: dds_psmx_metadata::data_type"]
+        [::std::mem::offset_of!(dds_psmx_metadata, data_type) - 4usize];
+    ["Offset of field: dds_psmx_metadata::instance_id"]
+        [::std::mem::offset_of!(dds_psmx_metadata, instance_id) - 8usize];
+    ["Offset of field: dds_psmx_metadata::sample_size"]
+        [::std::mem::offset_of!(dds_psmx_metadata, sample_size) - 12usize];
+    ["Offset of field: dds_psmx_metadata::guid"]
+        [::std::mem::offset_of!(dds_psmx_metadata, guid) - 16usize];
+    ["Offset of field: dds_psmx_metadata::timestamp"]
+        [::std::mem::offset_of!(dds_psmx_metadata, timestamp) - 32usize];
+    ["Offset of field: dds_psmx_metadata::statusinfo"]
+        [::std::mem::offset_of!(dds_psmx_metadata, statusinfo) - 40usize];
+    ["Offset of field: dds_psmx_metadata::cdr_identifier"]
+        [::std::mem::offset_of!(dds_psmx_metadata, cdr_identifier) - 44usize];
+    ["Offset of field: dds_psmx_metadata::cdr_options"]
+        [::std::mem::offset_of!(dds_psmx_metadata, cdr_options) - 46usize];
+};
+impl Default for dds_psmx_metadata {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct dds_psmx_node_identifier {
+    pub x: [u8; 16usize],
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_node_identifier"]
+        [::std::mem::size_of::<dds_psmx_node_identifier>() - 16usize];
+    ["Alignment of dds_psmx_node_identifier"]
+        [::std::mem::align_of::<dds_psmx_node_identifier>() - 1usize];
+    ["Offset of field: dds_psmx_node_identifier::x"]
+        [::std::mem::offset_of!(dds_psmx_node_identifier, x) - 0usize];
+};
+pub type dds_psmx_node_identifier_t = dds_psmx_node_identifier;
+pub type dds_psmx_type_qos_supported_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_instance: *mut dds_psmx,
+        forwhat: dds_psmx_endpoint_type_t,
+        data_type_props: dds_data_type_properties_t,
+        qos: *const dds_qos,
+    ) -> bool,
+>;
+pub type dds_psmx_create_topic_with_type_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_instance: *mut dds_psmx,
+        topic_name: *const ::std::os::raw::c_char,
+        type_name: *const ::std::os::raw::c_char,
+        data_type_props: dds_data_type_properties_t,
+        type_definition: *const ddsi_type,
+        sizeof_type: u32,
+    ) -> *mut dds_psmx_topic,
+>;
+pub type dds_psmx_delete_topic_fn =
+    ::std::option::Option<unsafe extern "C" fn(psmx_topic: *mut dds_psmx_topic) -> dds_return_t>;
+pub type dds_psmx_create_topic_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_instance: *mut dds_psmx,
+        topic_name: *const ::std::os::raw::c_char,
+        type_name: *const ::std::os::raw::c_char,
+        data_type_props: dds_data_type_properties_t,
+    ) -> *mut dds_psmx_topic,
+>;
+pub type dds_psmx_delete_fn =
+    ::std::option::Option<unsafe extern "C" fn(psmx_instance: *mut dds_psmx)>;
+pub type dds_psmx_deinit_fn =
+    ::std::option::Option<unsafe extern "C" fn(psmx_instance: *mut dds_psmx) -> dds_return_t>;
+pub type dds_psmx_get_node_identifier_fn = ::std::option::Option<
+    unsafe extern "C" fn(psmx_instance: *const dds_psmx) -> dds_psmx_node_identifier_t,
+>;
+pub type dds_psmx_supported_features_fn = ::std::option::Option<
+    unsafe extern "C" fn(psmx_instance: *const dds_psmx) -> dds_psmx_features_t,
+>;
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct dds_psmx_ops {
+    pub type_qos_supported: dds_psmx_type_qos_supported_fn,
+    pub create_topic: dds_psmx_create_topic_fn,
+    pub delete_topic: dds_psmx_delete_topic_fn,
+    pub deinit: dds_psmx_deinit_fn,
+    pub get_node_id: dds_psmx_get_node_identifier_fn,
+    pub supported_features: dds_psmx_supported_features_fn,
+    pub create_topic_with_type: dds_psmx_create_topic_with_type_fn,
+    pub delete_psmx: dds_psmx_delete_fn,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_ops"][::std::mem::size_of::<dds_psmx_ops>() - 64usize];
+    ["Alignment of dds_psmx_ops"][::std::mem::align_of::<dds_psmx_ops>() - 8usize];
+    ["Offset of field: dds_psmx_ops::type_qos_supported"]
+        [::std::mem::offset_of!(dds_psmx_ops, type_qos_supported) - 0usize];
+    ["Offset of field: dds_psmx_ops::create_topic"]
+        [::std::mem::offset_of!(dds_psmx_ops, create_topic) - 8usize];
+    ["Offset of field: dds_psmx_ops::delete_topic"]
+        [::std::mem::offset_of!(dds_psmx_ops, delete_topic) - 16usize];
+    ["Offset of field: dds_psmx_ops::deinit"]
+        [::std::mem::offset_of!(dds_psmx_ops, deinit) - 24usize];
+    ["Offset of field: dds_psmx_ops::get_node_id"]
+        [::std::mem::offset_of!(dds_psmx_ops, get_node_id) - 32usize];
+    ["Offset of field: dds_psmx_ops::supported_features"]
+        [::std::mem::offset_of!(dds_psmx_ops, supported_features) - 40usize];
+    ["Offset of field: dds_psmx_ops::create_topic_with_type"]
+        [::std::mem::offset_of!(dds_psmx_ops, create_topic_with_type) - 48usize];
+    ["Offset of field: dds_psmx_ops::delete_psmx"]
+        [::std::mem::offset_of!(dds_psmx_ops, delete_psmx) - 56usize];
+};
+pub type dds_psmx_ops_t = dds_psmx_ops;
+pub type dds_psmx_create_endpoint_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_topic: *mut dds_psmx_topic,
+        qos: *const dds_qos,
+        endpoint_type: dds_psmx_endpoint_type_t,
+    ) -> *mut dds_psmx_endpoint,
+>;
+pub type dds_psmx_delete_endpoint_fn = ::std::option::Option<
+    unsafe extern "C" fn(psmx_endpoint: *mut dds_psmx_endpoint) -> dds_return_t,
+>;
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct dds_psmx_topic_ops {
+    pub create_endpoint: dds_psmx_create_endpoint_fn,
+    pub delete_endpoint: dds_psmx_delete_endpoint_fn,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_topic_ops"][::std::mem::size_of::<dds_psmx_topic_ops>() - 16usize];
+    ["Alignment of dds_psmx_topic_ops"][::std::mem::align_of::<dds_psmx_topic_ops>() - 8usize];
+    ["Offset of field: dds_psmx_topic_ops::create_endpoint"]
+        [::std::mem::offset_of!(dds_psmx_topic_ops, create_endpoint) - 0usize];
+    ["Offset of field: dds_psmx_topic_ops::delete_endpoint"]
+        [::std::mem::offset_of!(dds_psmx_topic_ops, delete_endpoint) - 8usize];
+};
+pub type dds_psmx_topic_ops_t = dds_psmx_topic_ops;
+pub type dds_psmx_endpoint_request_loan_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_endpoint: *mut dds_psmx_endpoint,
+        size_requested: u32,
+    ) -> *mut dds_loaned_sample_t,
+>;
+pub type dds_psmx_endpoint_write_with_key_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_endpoint: *mut dds_psmx_endpoint,
+        data: *mut dds_loaned_sample_t,
+        keysz: usize,
+        key: *const ::std::os::raw::c_void,
+    ) -> dds_return_t,
+>;
+pub type dds_psmx_endpoint_write_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_endpoint: *mut dds_psmx_endpoint,
+        data: *mut dds_loaned_sample_t,
+    ) -> dds_return_t,
+>;
+pub type dds_psmx_endpoint_take_fn = ::std::option::Option<
+    unsafe extern "C" fn(psmx_endpoint: *mut dds_psmx_endpoint) -> *mut dds_loaned_sample_t,
+>;
+pub type dds_psmx_endpoint_on_data_available_fn = ::std::option::Option<
+    unsafe extern "C" fn(
+        psmx_endpoint: *mut dds_psmx_endpoint,
+        reader: dds_entity_t,
+    ) -> dds_return_t,
+>;
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct dds_psmx_endpoint_ops {
+    pub request_loan: dds_psmx_endpoint_request_loan_fn,
+    pub write: dds_psmx_endpoint_write_fn,
+    pub take: dds_psmx_endpoint_take_fn,
+    pub on_data_available: dds_psmx_endpoint_on_data_available_fn,
+    pub write_with_key: dds_psmx_endpoint_write_with_key_fn,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_endpoint_ops"][::std::mem::size_of::<dds_psmx_endpoint_ops>() - 40usize];
+    ["Alignment of dds_psmx_endpoint_ops"]
+        [::std::mem::align_of::<dds_psmx_endpoint_ops>() - 8usize];
+    ["Offset of field: dds_psmx_endpoint_ops::request_loan"]
+        [::std::mem::offset_of!(dds_psmx_endpoint_ops, request_loan) - 0usize];
+    ["Offset of field: dds_psmx_endpoint_ops::write"]
+        [::std::mem::offset_of!(dds_psmx_endpoint_ops, write) - 8usize];
+    ["Offset of field: dds_psmx_endpoint_ops::take"]
+        [::std::mem::offset_of!(dds_psmx_endpoint_ops, take) - 16usize];
+    ["Offset of field: dds_psmx_endpoint_ops::on_data_available"]
+        [::std::mem::offset_of!(dds_psmx_endpoint_ops, on_data_available) - 24usize];
+    ["Offset of field: dds_psmx_endpoint_ops::write_with_key"]
+        [::std::mem::offset_of!(dds_psmx_endpoint_ops, write_with_key) - 32usize];
+};
+pub type dds_psmx_endpoint_ops_t = dds_psmx_endpoint_ops;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_psmx {
+    pub ops: dds_psmx_ops_t,
+    pub instance_name: *const ::std::os::raw::c_char,
+    pub priority: i32,
+    pub locator: *const ddsi_locator,
+    pub instance_id: dds_psmx_instance_id_t,
+    pub psmx_topics: *mut ::std::os::raw::c_void,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx"][::std::mem::size_of::<dds_psmx>() - 104usize];
+    ["Alignment of dds_psmx"][::std::mem::align_of::<dds_psmx>() - 8usize];
+    ["Offset of field: dds_psmx::ops"][::std::mem::offset_of!(dds_psmx, ops) - 0usize];
+    ["Offset of field: dds_psmx::instance_name"]
+        [::std::mem::offset_of!(dds_psmx, instance_name) - 64usize];
+    ["Offset of field: dds_psmx::priority"][::std::mem::offset_of!(dds_psmx, priority) - 72usize];
+    ["Offset of field: dds_psmx::locator"][::std::mem::offset_of!(dds_psmx, locator) - 80usize];
+    ["Offset of field: dds_psmx::instance_id"]
+        [::std::mem::offset_of!(dds_psmx, instance_id) - 88usize];
+    ["Offset of field: dds_psmx::psmx_topics"]
+        [::std::mem::offset_of!(dds_psmx, psmx_topics) - 96usize];
+};
+impl Default for dds_psmx {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_psmx_topic {
+    pub ops: dds_psmx_topic_ops_t,
+    pub psmx_instance: *mut dds_psmx,
+    pub topic_name: *const ::std::os::raw::c_char,
+    pub type_name: *const ::std::os::raw::c_char,
+    pub data_type: dds_loan_data_type_t,
+    pub psmx_endpoints: *mut ::std::os::raw::c_void,
+    pub data_type_props: dds_data_type_properties_t,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_topic"][::std::mem::size_of::<dds_psmx_topic>() - 64usize];
+    ["Alignment of dds_psmx_topic"][::std::mem::align_of::<dds_psmx_topic>() - 8usize];
+    ["Offset of field: dds_psmx_topic::ops"][::std::mem::offset_of!(dds_psmx_topic, ops) - 0usize];
+    ["Offset of field: dds_psmx_topic::psmx_instance"]
+        [::std::mem::offset_of!(dds_psmx_topic, psmx_instance) - 16usize];
+    ["Offset of field: dds_psmx_topic::topic_name"]
+        [::std::mem::offset_of!(dds_psmx_topic, topic_name) - 24usize];
+    ["Offset of field: dds_psmx_topic::type_name"]
+        [::std::mem::offset_of!(dds_psmx_topic, type_name) - 32usize];
+    ["Offset of field: dds_psmx_topic::data_type"]
+        [::std::mem::offset_of!(dds_psmx_topic, data_type) - 40usize];
+    ["Offset of field: dds_psmx_topic::psmx_endpoints"]
+        [::std::mem::offset_of!(dds_psmx_topic, psmx_endpoints) - 48usize];
+    ["Offset of field: dds_psmx_topic::data_type_props"]
+        [::std::mem::offset_of!(dds_psmx_topic, data_type_props) - 56usize];
+};
+impl Default for dds_psmx_topic {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dds_psmx_endpoint {
+    pub ops: dds_psmx_endpoint_ops_t,
+    pub psmx_topic: *mut dds_psmx_topic,
+    pub endpoint_type: dds_psmx_endpoint_type_t,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of dds_psmx_endpoint"][::std::mem::size_of::<dds_psmx_endpoint>() - 56usize];
+    ["Alignment of dds_psmx_endpoint"][::std::mem::align_of::<dds_psmx_endpoint>() - 8usize];
+    ["Offset of field: dds_psmx_endpoint::ops"]
+        [::std::mem::offset_of!(dds_psmx_endpoint, ops) - 0usize];
+    ["Offset of field: dds_psmx_endpoint::psmx_topic"]
+        [::std::mem::offset_of!(dds_psmx_endpoint, psmx_topic) - 40usize];
+    ["Offset of field: dds_psmx_endpoint::endpoint_type"]
+        [::std::mem::offset_of!(dds_psmx_endpoint, endpoint_type) - 48usize];
+};
+impl Default for dds_psmx_endpoint {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 unsafe extern "C" {
     pub fn ddsi_serdata_addref(serdata_const: *const ddsi_serdata) -> *mut ddsi_serdata;
 }
 unsafe extern "C" {
     pub fn ddsi_serdata_removeref(serdata: *mut ddsi_serdata);
+}
+unsafe extern "C" {
+    pub fn dds_loaned_sample_addref(loaned_sample: *mut dds_loaned_sample);
+}
+unsafe extern "C" {
+    pub fn dds_loaned_sample_removeref(loaned_sample: *mut dds_loaned_sample);
 }
 pub const BUILTIN_TOPIC_DCPSPARTICIPANT: ::std::os::raw::c_int = 2147418113;
 pub const BUILTIN_TOPIC_DCPSTOPIC: ::std::os::raw::c_int = 2147418114;

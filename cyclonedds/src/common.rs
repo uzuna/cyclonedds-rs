@@ -54,7 +54,6 @@ pub trait Entity {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TestDomain {
-    WriterLoan = 2,
     ParticipantCreate = 20,
     ParticipantGetOrCreate,
     TopicCreation,
@@ -62,8 +61,6 @@ pub enum TestDomain {
     ReaderLiveliness,
     ReaderNoWriter,
     ReaderBuilderPriority,
-    SerdataOpsIox,
-    SertypeOpsSerialize,
     DomainBadConfig,
     DomainGetOrCreate,
     DomainSameConfig,
@@ -113,24 +110,6 @@ pub mod tests {
         DdsParticipant::get_or_create(Some(domain)).expect("failed to get test participant")
     }
 
-    pub const CYCLONE_SHM_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>
-    <CycloneDDS xmlns="https://cdds.io/config"
-                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/iceoryx/etc/cyclonedds.xsd">
-        <Domain id="any">
-            <SharedMemory>
-                <Enable>false</Enable>
-                <LogLevel>info</LogLevel>
-            </SharedMemory>
-        </Domain>
-        <Domain id="2">
-            <SharedMemory>
-                <Enable>true</Enable>
-                <LogLevel>info</LogLevel>
-            </SharedMemory>
-        </Domain>
-    </CycloneDDS>"###;
-
     const CYCLONE_LOOPBACK_CONFIG: &str = r###"<?xml version="1.0" encoding="UTF-8" ?>
     <CycloneDDS xmlns="https://cdds.io/config"
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -143,12 +122,6 @@ pub mod tests {
             </General>
         </Domain>
     </CycloneDDS>"###;
-
-    /// 共有メモリを有効化したテスト用ドメインを作成する
-    pub fn create_shm_domain(domain: cyclonedds_sys::DdsDomainId) -> Result<DdsDomain, DDSError> {
-        // SAFETY: 各テストは固有domainを逐次実行し、Domainより先にParticipantをdropする。
-        unsafe { DdsDomain::create(domain, Some(CYCLONE_SHM_CONFIG)) }
-    }
 
     /// loopback のみを使用するテスト用ドメインを作成する
     pub fn create_loopback_domain(

@@ -5,7 +5,7 @@ PACKAGE_NAME?=cyclonedds-custom
 PACKAGE_DEV_NAME?=${PACKAGE_NAME}-dev
 PACKAGE_CONFIG_NAME?=${PACKAGE_NAME}-config
 CRATE_NAME?=${PACKAGE_NAME}-deb
-CRATE_VERSION?=0.10.5
+CRATE_VERSION?=11.0.0
 HOMEPAGE?=https://github.com/uzuna/cyclonedds-pkg
 CARGO_DEB_MANIFEST=${CURDIR}/Cargo.toml
 CARGO_DEB_TEMPLATE=${CURDIR}/Cargo-template.toml
@@ -14,7 +14,7 @@ PYTHON ?= python3
 MAINTAINER ?=Example Team <dev@example.com>
 COPYRIGHT ?=2026, Example Team <dev@example.com>
 # バイナリとヘッダーのパッケージバージョン
-VERSION?=0.10.5
+VERSION?=11.0.0
 # configパッケージのバージョン
 CONFIG_VERSION?=0.0.1
 

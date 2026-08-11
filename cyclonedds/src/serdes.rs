@@ -135,7 +135,6 @@ impl<T> Sample<T> {
                 SampleData::Uninitialized => None,
                 SampleData::SdkKey => None,
                 SampleData::SdkData(it) => Some(it.as_ref()),
-                SampleData::ShmData(it) => unsafe { Some(it.as_ref()) },
             }
         } else {
             None
@@ -146,15 +145,6 @@ impl<T> Sample<T> {
     pub fn cdr(&self) -> Option<&[u8]> {
         if let Some(serdata) = self.serdata {
             let serdata = SerData::<T>::const_ref_from_serdata(serdata);
-            if cfg!(feature = "shm") && !serdata.serdata.iox_chunk.is_null() {
-                unsafe {
-                    let iox_header = iceoryx_header_from_chunk(serdata.serdata.iox_chunk);
-                    let size = (*iox_header).data_size as usize;
-                    let buf =
-                        std::slice::from_raw_parts(serdata.serdata.iox_chunk as *const u8, size);
-                    return Some(buf);
-                }
-            }
             serdata.cdr.as_deref()
         } else {
             None

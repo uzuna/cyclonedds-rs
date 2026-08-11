@@ -112,10 +112,9 @@ qos.set_durability_service(
 [tests/practical.rs](../cyclonedds/tests/practical.rs) で 1〜99 を、手元では 5000 まで
 「直近n件が順序どおり届く」ことを確認している。
 
-ただし **n が 16 を超えると共有メモリ(iceoryx)のゼロコピー経路が使われなくなる**。
-CycloneDDSは `DURABILITY_SERVICE` の深さが `iox_cfg_max_publisher_history()`(既定16)を
-超えるwriterをゼロコピー対象から外すが、**エラーもログも出さない**。ゼロコピーが要る場合は
-同期件数を16以下に抑えること。
+Cyclone DDS 11では PSMX/Iceoryx の共有メモリ経路を使う。cyclonedds-rs は
+XCDR1のシリアライズ済みデータを転送するため、旧実装固有の16件境界は適用されない。
+実際に保持できる件数は、利用するIceoryx/PSMXの設定と必要メモリ量で決まる。
 
 ---
 
