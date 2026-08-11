@@ -25,7 +25,7 @@ def latest_input_dir(results_root):
 
 
 def server_url(address):
-    host, port = address
+    host, port = address[:2]
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
     return f"http://{host}:{port}/"
