@@ -1,0 +1,668 @@
+{
+  "artifact_url": "https://github.com/uzuna/cyclonedds-rs/actions/runs/31465545866#artifacts",
+  "cases": {
+    "cases": [
+      {
+        "burst": 1,
+        "id": "latency-256b-udp",
+        "kind": "latency",
+        "measured_messages": 1000,
+        "payload": {
+          "bytes": 256,
+          "kind": "fixed"
+        },
+        "rate_hz": 1000,
+        "shm": false,
+        "timeout_seconds": 30,
+        "transport": "udp",
+        "warmup_messages": 100
+      },
+      {
+        "burst": 1,
+        "id": "throughput-boundary-below-udp",
+        "kind": "throughput",
+        "measured_messages": 100,
+        "payload": {
+          "kind": "wire_boundary",
+          "relation": "below",
+          "wire_bytes": 65535
+        },
+        "rate_hz": null,
+        "shm": false,
+        "timeout_seconds": 30,
+        "transport": "udp",
+        "warmup_messages": 10
+      },
+      {
+        "burst": 1,
+        "id": "throughput-boundary-above-udp",
+        "kind": "throughput",
+        "measured_messages": 100,
+        "payload": {
+          "kind": "wire_boundary",
+          "relation": "above",
+          "wire_bytes": 65535
+        },
+        "rate_hz": null,
+        "shm": false,
+        "timeout_seconds": 30,
+        "transport": "udp",
+        "warmup_messages": 10
+      },
+      {
+        "burst": 1,
+        "id": "throughput-1mib-shm",
+        "kind": "throughput",
+        "measured_messages": 100,
+        "payload": {
+          "bytes": 1048576,
+          "kind": "fixed"
+        },
+        "rate_hz": null,
+        "shm": true,
+        "timeout_seconds": 60,
+        "transport": "shm",
+        "warmup_messages": 10
+      },
+      {
+        "burst": 1,
+        "id": "smoke-256b-udp",
+        "kind": "smoke",
+        "measured_messages": 10,
+        "payload": {
+          "bytes": 256,
+          "kind": "fixed"
+        },
+        "rate_hz": null,
+        "shm": false,
+        "timeout_seconds": 30,
+        "transport": "udp",
+        "warmup_messages": 0
+      },
+      {
+        "burst": 1,
+        "id": "cdr-256b",
+        "kind": "cdr",
+        "measured_messages": 10000,
+        "payload": {
+          "bytes": 256,
+          "kind": "fixed"
+        },
+        "rate_hz": null,
+        "shm": false,
+        "timeout_seconds": 30,
+        "transport": "none",
+        "warmup_messages": 100
+      },
+      {
+        "burst": 1,
+        "id": "cdr-16kib",
+        "kind": "cdr",
+        "measured_messages": 1000,
+        "payload": {
+          "bytes": 16384,
+          "kind": "fixed"
+        },
+        "rate_hz": null,
+        "shm": false,
+        "timeout_seconds": 30,
+        "transport": "none",
+        "warmup_messages": 100
+      },
+      {
+        "burst": 1,
+        "id": "cdr-1mib",
+        "kind": "cdr",
+        "measured_messages": 100,
+        "payload": {
+          "bytes": 1048576,
+          "kind": "fixed"
+        },
+        "rate_hz": null,
+        "shm": false,
+        "timeout_seconds": 60,
+        "transport": "none",
+        "warmup_messages": 10
+      }
+    ],
+    "domain_id": 1,
+    "interface": "lo",
+    "qos": {
+      "durability": "volatile",
+      "history": "keep_last",
+      "history_depth": 32,
+      "reliability": "reliable"
+    },
+    "schema_version": 1
+  },
+  "commit": "ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+  "commit_message": "Merge pull request #7 from uzuna/feat/benchmark-baseline\n\nfeat: improve benchmark history dashboard",
+  "commit_url": "https://github.com/uzuna/cyclonedds-rs/commit/ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+  "measured_at": "2026-08-11T06:36:45.422935Z",
+  "measured_at_unix": 1786430205,
+  "metadata": {
+    "build": {
+      "profile": "release",
+      "rustflags": null,
+      "target": "aarch64-unknown-linux-gnu"
+    },
+    "cases": {
+      "cases": [
+        {
+          "burst": 1,
+          "id": "latency-256b-udp",
+          "kind": "latency",
+          "measured_messages": 1000,
+          "payload": {
+            "bytes": 256,
+            "kind": "fixed"
+          },
+          "rate_hz": 1000,
+          "shm": false,
+          "timeout_seconds": 30,
+          "transport": "udp",
+          "warmup_messages": 100
+        },
+        {
+          "burst": 1,
+          "id": "throughput-boundary-below-udp",
+          "kind": "throughput",
+          "measured_messages": 100,
+          "payload": {
+            "kind": "wire_boundary",
+            "relation": "below",
+            "wire_bytes": 65535
+          },
+          "rate_hz": null,
+          "shm": false,
+          "timeout_seconds": 30,
+          "transport": "udp",
+          "warmup_messages": 10
+        },
+        {
+          "burst": 1,
+          "id": "throughput-boundary-above-udp",
+          "kind": "throughput",
+          "measured_messages": 100,
+          "payload": {
+            "kind": "wire_boundary",
+            "relation": "above",
+            "wire_bytes": 65535
+          },
+          "rate_hz": null,
+          "shm": false,
+          "timeout_seconds": 30,
+          "transport": "udp",
+          "warmup_messages": 10
+        },
+        {
+          "burst": 1,
+          "id": "throughput-1mib-shm",
+          "kind": "throughput",
+          "measured_messages": 100,
+          "payload": {
+            "bytes": 1048576,
+            "kind": "fixed"
+          },
+          "rate_hz": null,
+          "shm": true,
+          "timeout_seconds": 60,
+          "transport": "shm",
+          "warmup_messages": 10
+        },
+        {
+          "burst": 1,
+          "id": "smoke-256b-udp",
+          "kind": "smoke",
+          "measured_messages": 10,
+          "payload": {
+            "bytes": 256,
+            "kind": "fixed"
+          },
+          "rate_hz": null,
+          "shm": false,
+          "timeout_seconds": 30,
+          "transport": "udp",
+          "warmup_messages": 0
+        },
+        {
+          "burst": 1,
+          "id": "cdr-256b",
+          "kind": "cdr",
+          "measured_messages": 10000,
+          "payload": {
+            "bytes": 256,
+            "kind": "fixed"
+          },
+          "rate_hz": null,
+          "shm": false,
+          "timeout_seconds": 30,
+          "transport": "none",
+          "warmup_messages": 100
+        },
+        {
+          "burst": 1,
+          "id": "cdr-16kib",
+          "kind": "cdr",
+          "measured_messages": 1000,
+          "payload": {
+            "bytes": 16384,
+            "kind": "fixed"
+          },
+          "rate_hz": null,
+          "shm": false,
+          "timeout_seconds": 30,
+          "transport": "none",
+          "warmup_messages": 100
+        },
+        {
+          "burst": 1,
+          "id": "cdr-1mib",
+          "kind": "cdr",
+          "measured_messages": 100,
+          "payload": {
+            "bytes": 1048576,
+            "kind": "fixed"
+          },
+          "rate_hz": null,
+          "shm": false,
+          "timeout_seconds": 60,
+          "transport": "none",
+          "warmup_messages": 10
+        }
+      ],
+      "domain_id": 1,
+      "interface": "lo",
+      "qos": {
+        "durability": "volatile",
+        "history": "keep_last",
+        "history_depth": 32,
+        "reliability": "reliable"
+      },
+      "schema_version": 1
+    },
+    "dds_runtime": {
+      "shm": {
+        "fragment_size": 1344,
+        "max_message_size": 14720,
+        "shared_memory": true
+      },
+      "udp": {
+        "fragment_size": 1344,
+        "max_message_size": 14720,
+        "shared_memory": false
+      }
+    },
+    "host": {
+      "cpu": "aarch64",
+      "cpu_count": 4,
+      "governor": {
+        "reason": "No such file or directory (os error 2)",
+        "value": null
+      },
+      "kernel": "6.17.0-1020-azure",
+      "lo_mtu": 65536,
+      "os": "Linux 6.17.0-1020-azure GNU/Linux",
+      "perf": {
+        "status": null,
+        "stderr": "Failure to read '#slots'Failure to read '#slots'Failure to read '#slots'Failure to read '#slots'",
+        "value": ""
+      },
+      "ram_bytes": 16722046976,
+      "runner": "GitHub Actions 1000000162"
+    },
+    "repository": {
+      "cargo_lock_sha256": "571253f46be864e0f58f9213680ff077b2fdaad00ade1d50a4550496106cac3d",
+      "commit": "ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "dirty": false,
+      "generated_binding_sha256": "f88d0a176a051507bf466e3a04171e738ba48a6e193ae6230a50ba228b5e042b",
+      "package_versions": {
+        "cdds_derive": "0.3.0",
+        "cyclonedds-bench": "0.1.0",
+        "cyclonedds-rs": "0.14.0",
+        "cyclonedds-sys": "0.3.1"
+      }
+    },
+    "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+    "schema_version": 1,
+    "toolchain": {
+      "bindgen": {
+        "reason": "No such file or directory (os error 2)",
+        "value": null
+      },
+      "cargo": {
+        "status": 0,
+        "stderr": "",
+        "value": "cargo 1.97.1 (c980f4866 2026-06-30)\nrelease: 1.97.1\ncommit-hash: c980f4866141969fab6254a680546a277789d6f0\ncommit-date: 2026-06-30\nhost: aarch64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.20.0-DEV (sys:0.4.88+curl-8.20.0 vendored ssl:OpenSSL/3.6.2)\nssl: OpenSSL 3.6.2 7 Apr 2026\nos: Ubuntu 24.4.0 (noble) [64-bit]"
+      },
+      "cc": {
+        "status": 0,
+        "stderr": "",
+        "value": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+      },
+      "clang": {
+        "status": 0,
+        "stderr": "",
+        "value": "Ubuntu clang version 18.1.3 (1ubuntu1)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin"
+      },
+      "cmake": {
+        "status": 0,
+        "stderr": "",
+        "value": "cmake version 3.31.6\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake)."
+      },
+      "rustc": {
+        "status": 0,
+        "stderr": "",
+        "value": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6"
+      }
+    },
+    "vendor": {
+      "cyclonedds_describe": "76360fb",
+      "cyclonedds_dirty": false,
+      "cyclonedds_sha": "76360fb73907ce3dba397e89090a7a4ecf4f1246",
+      "iceoryx_describe": "f756b7c",
+      "iceoryx_sha": "f756b7c99ddf714d05929374492b34c5c69355bb"
+    }
+  },
+  "results": [
+    {
+      "burst": 1,
+      "bytes_received": 2560,
+      "bytes_sent": 2560,
+      "case_id": "smoke-256b-udp",
+      "deserialize_elapsed_ns": null,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 3000,
+      "error": null,
+      "interface": "lo",
+      "kind": "smoke",
+      "latency": {
+        "count": 10,
+        "max_ns": 151439,
+        "mean_ns": 84620,
+        "min_ns": 58932,
+        "p50_ns": 80195,
+        "p95_ns": 151439,
+        "p99_ns": 151439
+      },
+      "measured_messages": 10,
+      "messages_received": 10,
+      "messages_sent": 10,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 256,
+      "rate_hz": null,
+      "roundtrip_ok": null,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": null,
+      "serialized_bytes": 280,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": 853333333.3333333,
+      "transport": "udp",
+      "unsupported": [],
+      "warmup_messages": 0
+    },
+    {
+      "burst": 1,
+      "bytes_received": 2800000,
+      "bytes_sent": 2800000,
+      "case_id": "cdr-256b",
+      "deserialize_elapsed_ns": 5065921,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 7997827,
+      "error": null,
+      "interface": "none",
+      "kind": "cdr",
+      "latency": null,
+      "measured_messages": 10000,
+      "messages_received": 10000,
+      "messages_sent": 10000,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 256,
+      "rate_hz": null,
+      "roundtrip_ok": true,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": 2931906,
+      "serialized_bytes": 280,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": null,
+      "transport": "none",
+      "unsupported": [],
+      "warmup_messages": 100
+    },
+    {
+      "burst": 1,
+      "bytes_received": 16408000,
+      "bytes_sent": 16408000,
+      "case_id": "cdr-16kib",
+      "deserialize_elapsed_ns": 29112795,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 43763938,
+      "error": null,
+      "interface": "none",
+      "kind": "cdr",
+      "latency": null,
+      "measured_messages": 1000,
+      "messages_received": 1000,
+      "messages_sent": 1000,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 16384,
+      "rate_hz": null,
+      "roundtrip_ok": true,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": 14651143,
+      "serialized_bytes": 16408,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": null,
+      "transport": "none",
+      "unsupported": [],
+      "warmup_messages": 100
+    },
+    {
+      "burst": 1,
+      "bytes_received": 104860000,
+      "bytes_sent": 104860000,
+      "case_id": "cdr-1mib",
+      "deserialize_elapsed_ns": 123571459,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 233615278,
+      "error": null,
+      "interface": "none",
+      "kind": "cdr",
+      "latency": null,
+      "measured_messages": 100,
+      "messages_received": 100,
+      "messages_sent": 100,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 1048576,
+      "rate_hz": null,
+      "roundtrip_ok": true,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": 110043819,
+      "serialized_bytes": 1048600,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": null,
+      "transport": "none",
+      "unsupported": [],
+      "warmup_messages": 10
+    },
+    {
+      "burst": 1,
+      "bytes_received": 281600,
+      "bytes_sent": 281600,
+      "case_id": "latency-256b-udp",
+      "deserialize_elapsed_ns": null,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 999117475,
+      "error": null,
+      "interface": "lo",
+      "kind": "latency",
+      "latency": {
+        "count": 1000,
+        "max_ns": 1174004,
+        "mean_ns": 100201,
+        "min_ns": 18703,
+        "p50_ns": 90707,
+        "p95_ns": 170686,
+        "p99_ns": 649130
+      },
+      "measured_messages": 1000,
+      "messages_received": 1100,
+      "messages_sent": 1100,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 256,
+      "rate_hz": 1000,
+      "roundtrip_ok": null,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": null,
+      "serialized_bytes": 280,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": 256226.12596181445,
+      "transport": "udp",
+      "unsupported": [],
+      "warmup_messages": 100
+    },
+    {
+      "burst": 1,
+      "bytes_received": 7205880,
+      "bytes_sent": 7205880,
+      "case_id": "throughput-boundary-below-udp",
+      "deserialize_elapsed_ns": null,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 29730923,
+      "error": null,
+      "interface": "lo",
+      "kind": "throughput",
+      "latency": {
+        "count": 100,
+        "max_ns": 4750533,
+        "mean_ns": 1800383,
+        "min_ns": 431855,
+        "p50_ns": 1769121,
+        "p95_ns": 4304215,
+        "p99_ns": 4750533
+      },
+      "measured_messages": 100,
+      "messages_received": 110,
+      "messages_sent": 110,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 65508,
+      "rate_hz": null,
+      "roundtrip_ok": null,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": null,
+      "serialized_bytes": 65532,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": 220336247.2130448,
+      "transport": "udp",
+      "unsupported": [],
+      "warmup_messages": 10
+    },
+    {
+      "burst": 1,
+      "bytes_received": 7206320,
+      "bytes_sent": 7206320,
+      "case_id": "throughput-boundary-above-udp",
+      "deserialize_elapsed_ns": null,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 43953955,
+      "error": null,
+      "interface": "lo",
+      "kind": "throughput",
+      "latency": {
+        "count": 100,
+        "max_ns": 29632449,
+        "mean_ns": 16974463,
+        "min_ns": 2562155,
+        "p50_ns": 19852576,
+        "p95_ns": 28996006,
+        "p99_ns": 29632449
+      },
+      "measured_messages": 100,
+      "messages_received": 110,
+      "messages_sent": 110,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 65512,
+      "rate_hz": null,
+      "roundtrip_ok": null,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": null,
+      "serialized_bytes": 65536,
+      "shm": false,
+      "status": "ok",
+      "throughput_bytes_per_sec": 149046883.26681864,
+      "transport": "udp",
+      "unsupported": [],
+      "warmup_messages": 10
+    },
+    {
+      "burst": 1,
+      "bytes_received": 115343360,
+      "bytes_sent": 115343360,
+      "case_id": "throughput-1mib-shm",
+      "deserialize_elapsed_ns": null,
+      "domain_id": 1,
+      "duplicate": 0,
+      "elapsed_ns": 578607052,
+      "error": null,
+      "interface": "lo",
+      "kind": "throughput",
+      "latency": {
+        "count": 100,
+        "max_ns": 10257557,
+        "mean_ns": 9209968,
+        "min_ns": 8913338,
+        "p50_ns": 9098993,
+        "p95_ns": 9797904,
+        "p99_ns": 10257557
+      },
+      "measured_messages": 100,
+      "messages_received": 110,
+      "messages_sent": 110,
+      "missing": 0,
+      "out_of_order": 0,
+      "payload_bytes": 1048576,
+      "rate_hz": null,
+      "roundtrip_ok": null,
+      "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+      "schema_version": 1,
+      "serialize_elapsed_ns": null,
+      "serialized_bytes": 1048600,
+      "shm": true,
+      "status": "ok",
+      "throughput_bytes_per_sec": 181224199.80460247,
+      "transport": "shm",
+      "unsupported": [],
+      "warmup_messages": 10
+    }
+  ],
+  "run_id": "github-31465545866-ba8b2d48b8599ebc31e9b63a131128212d5fcc6a",
+  "run_url": "https://github.com/uzuna/cyclonedds-rs/actions/runs/31465545866",
+  "schema_version": 1
+}
