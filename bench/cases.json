@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "domain_id": 1,
+  "interface": "lo",
+  "qos": {
+    "reliability": "reliable",
+    "durability": "volatile",
+    "history": "keep_last",
+    "history_depth": 32
+  },
+  "cases": [
+    {
+      "id": "latency-256b-udp",
+      "kind": "latency",
+      "transport": "udp",
+      "shm": false,
+      "payload": { "kind": "fixed", "bytes": 256 },
+      "rate_hz": 1000,
+      "burst": 1,
+      "warmup_messages": 100,
+      "measured_messages": 1000,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "throughput-boundary-below-udp",
+      "kind": "throughput",
+      "transport": "udp",
+      "shm": false,
+      "payload": { "kind": "wire_boundary", "relation": "below", "wire_bytes": 65535 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 100,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "throughput-boundary-above-udp",
+      "kind": "throughput",
+      "transport": "udp",
+      "shm": false,
+      "payload": { "kind": "wire_boundary", "relation": "above", "wire_bytes": 65535 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 100,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "throughput-1mib-shm",
+      "kind": "throughput",
+      "transport": "shm",
+      "shm": true,
+      "payload": { "kind": "fixed", "bytes": 1048576 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 100,
+      "timeout_seconds": 60
+    },
+    {
+      "id": "smoke-256b-udp",
+      "kind": "smoke",
+      "transport": "udp",
+      "shm": false,
+      "payload": { "kind": "fixed", "bytes": 256 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 0,
+      "measured_messages": 10,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "cdr-256b",
+      "kind": "cdr",
+      "transport": "none",
+      "shm": false,
+      "payload": { "kind": "fixed", "bytes": 256 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 100,
+      "measured_messages": 10000,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "cdr-16kib",
+      "kind": "cdr",
+      "transport": "none",
+      "shm": false,
+      "payload": { "kind": "fixed", "bytes": 16384 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 100,
+      "measured_messages": 1000,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "cdr-1mib",
+      "kind": "cdr",
+      "transport": "none",
+      "shm": false,
+      "payload": { "kind": "fixed", "bytes": 1048576 },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 100,
+      "timeout_seconds": 60
+    }
+  ]
+}
