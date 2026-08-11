@@ -22,12 +22,8 @@ jobs:
   benchmark:
     needs: tests
     runs-on: ubuntu-24.04-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        repeat: ${{ fromJSON(github.event_name == 'pull_request' && '[1,2,3,4,5]' || '[1]') }}
     env:
-      BENCH_RUN_ID: github-${{ github.run_id }}-${{ github.sha }}-repeat-${{ matrix.repeat }}
+      BENCH_RUN_ID: github-${{ github.run_id }}-${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -55,13 +51,20 @@ jobs:
       - name: Build benchmark
         run: cargo build --release -p cyclonedds-bench
       - name: Run benchmark cases
-        run: make BENCH_RUN_ID="$BENCH_RUN_ID" test-local-all
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            for repeat in 1 2 3 4 5; do
+              make BENCH_RUN_ID="${BENCH_RUN_ID}-repeat-${repeat}" test-local-all
+            done
+          else
+            make BENCH_RUN_ID="$BENCH_RUN_ID" test-local-all
+          fi
       - name: Upload benchmark results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ github.run_id }}-${{ matrix.repeat }}
-          path: target/bench-results/${{ env.BENCH_RUN_ID }}
+          name: benchmark-results-${{ github.run_id }}
+          path: target/bench-results
           if-no-files-found: warn
 
   publish:
@@ -79,7 +82,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          name: benchmark-results-${{ github.run_id }}-1
+          name: benchmark-results-${{ github.run_id }}
           path: bench-results
       - name: Restore benchmark site
         run: |

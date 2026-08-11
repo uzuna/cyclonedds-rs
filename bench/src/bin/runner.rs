@@ -212,10 +212,9 @@ fn run_process_case(
         None
     };
     let result = run_children(run_id, case_definition, &topic, &config_path);
-    if let Err(error) = stop_roudi(roudi) {
-        eprintln!("RouDi cleanup failed: {error}");
-    }
+    let cleanup_result = stop_roudi(roudi);
     let _ = fs::remove_file(config_path);
+    cleanup_result?;
     result
 }
 
@@ -433,6 +432,8 @@ fn start_roudi() -> Result<RoudiProcess, Box<dyn std::error::Error>> {
         .arg(&config_path)
         .arg("--monitoring-mode")
         .arg("off")
+        .arg("--kill-delay")
+        .arg("0")
         .arg("--log-level")
         .arg("error")
         .stdout(Stdio::piped())
