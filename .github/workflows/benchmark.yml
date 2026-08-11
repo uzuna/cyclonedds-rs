@@ -1,0 +1,102 @@
+name: Benchmark
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-main
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/test.yml
+
+  benchmark:
+    needs: tests
+    runs-on: ubuntu-24.04-arm
+    env:
+      BENCH_RUN_ID: github-${{ github.run_id }}-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache debian packages
+        id: cache-deb
+        uses: actions/cache@v4
+        with:
+          path: ./deb/*.deb
+          key: deb-ubuntu-24.04-arm-arm64-${{ hashFiles('vendor/Makefile', 'vendor/debian/Makefile', 'vendor/debian/Cargo-template.toml') }}
+      - uses: taiki-e/install-action@v2
+        if: steps.cache-deb.outputs.cache-hit != 'true'
+        with:
+          tool: cargo-deb
+      - name: Build deb package
+        if: steps.cache-deb.outputs.cache-hit != 'true'
+        run: |
+          make -C vendor/ setup
+          make -C vendor/debian deb
+      - name: Install dependencies
+        run: sudo dpkg -i ./deb/*.deb
+      - name: Build benchmark
+        run: cargo build --release -p cyclonedds-bench
+      - name: Run benchmark cases
+        run: make BENCH_RUN_ID="$BENCH_RUN_ID" test-local-all
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: target/bench-results/${{ env.BENCH_RUN_ID }}
+          if-no-files-found: warn
+
+  publish:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      BENCH_RUN_ID: github-${{ github.run_id }}-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: bench-results
+      - name: Restore benchmark site
+        run: |
+          mkdir -p site
+          if git ls-remote --exit-code origin refs/heads/gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git archive FETCH_HEAD | tar -x -C site
+          fi
+      - name: Build benchmark site
+        run: |
+          INPUT_DIR=bench-results
+          if [ ! -f "$INPUT_DIR/metadata.json" ]; then
+            INPUT_DIR="$(dirname "$(find "$INPUT_DIR" -name metadata.json -print -quit)")"
+          fi
+          python3 scripts/bench_site.py \
+            --input-dir "$INPUT_DIR" \
+            --site-dir site \
+            --commit "$GITHUB_SHA" \
+            --run-id "$BENCH_RUN_ID" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --artifact-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts"
+      - name: Publish benchmark site
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site
+          keep_files: true
+          enable_jekyll: false
