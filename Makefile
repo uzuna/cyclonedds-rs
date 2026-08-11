@@ -17,7 +17,14 @@ BENCH_DIR := $(BENCH_OUT)/$(BENCH_RUN_ID)
 BENCH_METADATA := $(BENCH_DIR)/metadata.json
 BENCH_RESULTS := $(BENCH_DIR)/results.jsonl
 
-.PHONY: build-local-bench test-local-smoke test-local-cdr test-local-udp test-local-shm test-local-all
+.PHONY: check-actions update-action-pins build-local-bench test-local-smoke test-local-cdr test-local-udp test-local-shm test-local-all
+
+check-actions:
+	aqua exec -- actionlint
+	aqua exec -- pinact run --fix=false --no-api
+
+update-action-pins:
+	aqua exec -- pinact run --update
 
 build-local-bench:
 	cargo build --release -p cyclonedds-bench
