@@ -64,6 +64,7 @@ jobs:
       contents: write
     env:
       BENCH_RUN_ID: github-${{ github.run_id }}-${{ github.sha }}
+      BENCH_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -85,13 +86,18 @@ jobs:
           if [ ! -f "$INPUT_DIR/metadata.json" ]; then
             INPUT_DIR="$(dirname "$(find "$INPUT_DIR" -name metadata.json -print -quit)")"
           fi
+          BENCH_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          BENCH_ARTIFACT_URL="$BENCH_RUN_URL#artifacts"
+          BENCH_COMMIT_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
           python3 scripts/bench_site.py \
             --input-dir "$INPUT_DIR" \
             --site-dir site \
             --commit "$GITHUB_SHA" \
+            --commit-message "$BENCH_COMMIT_MESSAGE" \
             --run-id "$BENCH_RUN_ID" \
-            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --artifact-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts"
+            --run-url "$BENCH_RUN_URL" \
+            --artifact-url "$BENCH_ARTIFACT_URL" \
+            --commit-url "$BENCH_COMMIT_URL"
       - name: Publish benchmark site
         uses: peaceiris/actions-gh-pages@v4
         with:
