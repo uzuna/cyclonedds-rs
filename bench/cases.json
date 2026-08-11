@@ -17,8 +17,8 @@
       "payload": { "kind": "fixed", "bytes": 256 },
       "rate_hz": 1000,
       "burst": 1,
-      "warmup_messages": 100,
-      "measured_messages": 1000,
+      "warmup_messages": 1000,
+      "measured_messages": 10000,
       "timeout_seconds": 30
     },
     {
@@ -29,8 +29,8 @@
       "payload": { "kind": "wire_boundary", "relation": "below", "wire_bytes": 65535 },
       "rate_hz": null,
       "burst": 1,
-      "warmup_messages": 10,
-      "measured_messages": 100,
+      "warmup_messages": 100,
+      "measured_messages": 1000,
       "timeout_seconds": 30
     },
     {
@@ -41,8 +41,8 @@
       "payload": { "kind": "wire_boundary", "relation": "above", "wire_bytes": 65535 },
       "rate_hz": null,
       "burst": 1,
-      "warmup_messages": 10,
-      "measured_messages": 100,
+      "warmup_messages": 100,
+      "measured_messages": 1000,
       "timeout_seconds": 30
     },
     {
@@ -78,7 +78,7 @@
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 100,
-      "measured_messages": 10000,
+      "measured_messages": 100000,
       "timeout_seconds": 30
     },
     {
@@ -90,7 +90,7 @@
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 100,
-      "measured_messages": 1000,
+      "measured_messages": 10000,
       "timeout_seconds": 30
     },
     {
