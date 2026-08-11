@@ -1,5 +1,5 @@
 [workspace]
-members = ["cyclonedds", "cyclonedds-sys", "dds_derive"]
+members = ["bench", "cyclonedds", "cyclonedds-sys", "dds_derive"]
 resolver = "2"
 
 [workspace.package]
