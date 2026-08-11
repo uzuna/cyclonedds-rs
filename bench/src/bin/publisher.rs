@@ -1,11 +1,11 @@
 use std::env;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use cyclonedds_bench::{
-    create_named_topic, create_writer, emit_control, make_message, monotonic_ns, wait_for_match,
-    wait_for_start, BenchmarkCase, CaseFile, DOMAIN_ID,
+    BenchmarkCase, CaseFile, DOMAIN_ID, create_named_topic, create_writer, emit_control,
+    make_message, monotonic_ns, wait_for_match, wait_for_start,
 };
 use cyclonedds_rs::ParticipantBuilder;
 
@@ -49,7 +49,7 @@ fn publish(
     case_definition: &BenchmarkCase,
     resolved_case: cyclonedds_bench::ResolvedCase,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let participant = ParticipantBuilder::new().with_domain(DOMAIN_ID).create()?;
+    let participant = unsafe { ParticipantBuilder::new().with_domain(DOMAIN_ID).create()? };
     let topic = create_named_topic(&participant, &arguments.topic)?;
     let matched = Arc::new(AtomicBool::new(false));
     let mut writer = create_writer(&participant, topic, matched.clone())?;

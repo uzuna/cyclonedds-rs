@@ -3,18 +3,18 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use cdr::Infinite;
 use cdds_derive::Topic;
+use cdr::Infinite;
 use cyclonedds_rs::{
     DDSError, DdsListener, DdsListenerBuilder, DdsParticipant, DdsQos, DdsReader, DdsSubscriber,
     DdsTopic, DdsWriter, ReaderBuilder, SampleBuffer, TopicType, WriterBuilder,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const CASE_SCHEMA_VERSION: u32 = 1;
 pub const CASES_JSON: &str = include_str!("../cases.json");
@@ -273,7 +273,7 @@ pub fn make_qos() -> Result<DdsQos, Box<dyn std::error::Error>> {
         Duration::from_secs(1),
     )
     .set_durability(cyclonedds_rs::dds_durability_kind::DDS_DURABILITY_VOLATILE)
-    .set_history(cyclonedds_rs::dds_history_kind::DDS_HISTORY_KEEP_LAST, 32);
+    .set_history(cyclonedds_rs::dds_history_kind::DDS_HISTORY_KEEP_LAST, 32)?;
     Ok(qos)
 }
 
@@ -688,7 +688,7 @@ count = 10
 
 #[cfg(test)]
 mod tests {
-    use super::{find_boundary_payload, latency_summary, serialize_message, BoundaryRelation};
+    use super::{BoundaryRelation, find_boundary_payload, latency_summary, serialize_message};
 
     #[test]
     fn 境界ケースは整列済みシリアライズサイズを選ぶ() {

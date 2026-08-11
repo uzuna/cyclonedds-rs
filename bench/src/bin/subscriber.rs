@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 use std::env;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use cyclonedds_bench::{
-    create_named_topic, create_reader, emit_control, latency_summary, make_message, monotonic_ns,
-    wait_for_match, wait_for_start, BenchmarkCase, CaseFile, ResultRecord, DOMAIN_ID,
+    BenchmarkCase, CaseFile, DOMAIN_ID, ResultRecord, create_named_topic, create_reader,
+    emit_control, latency_summary, make_message, monotonic_ns, wait_for_match, wait_for_start,
 };
 use cyclonedds_rs::{DdsSubscriber, ParticipantBuilder, SampleBuffer};
 
@@ -50,7 +50,7 @@ fn receive(
     case_definition: &BenchmarkCase,
     resolved_case: cyclonedds_bench::ResolvedCase,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let participant = ParticipantBuilder::new().with_domain(DOMAIN_ID).create()?;
+    let participant = unsafe { ParticipantBuilder::new().with_domain(DOMAIN_ID).create()? };
     let subscriber = DdsSubscriber::create(&participant, None, None)?;
     let topic = create_named_topic(&participant, &arguments.topic)?;
     let matched = Arc::new(AtomicBool::new(false));

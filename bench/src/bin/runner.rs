@@ -4,15 +4,15 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use cyclonedds_bench::{
-    make_message, metadata, roudi_config, serialize_message, write_json_line, BenchmarkCase,
-    CaseFile, CaseKind, ResultRecord, CASE_SCHEMA_VERSION, DOMAIN_ID,
+    BenchmarkCase, CASE_SCHEMA_VERSION, CaseFile, CaseKind, DOMAIN_ID, ResultRecord, make_message,
+    metadata, roudi_config, serialize_message, write_json_line,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -361,7 +361,7 @@ fn receive_handshake_line(
         Ok(line) if line.starts_with("ERROR") => return Err(line.into()),
         Ok(_) | Err(TryRecvError::Empty) => {}
         Err(TryRecvError::Disconnected) => {
-            return Err(format!("{role} exited before handshake").into())
+            return Err(format!("{role} exited before handshake").into());
         }
     }
     Ok(())
