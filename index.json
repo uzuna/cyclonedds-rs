@@ -39,6 +39,126 @@
   ],
   "runs": [
     {
+      "artifact_url": "https://github.com/uzuna/cyclonedds-rs/actions/runs/31604349505#artifacts",
+      "cases": [
+        "cdr-16kib",
+        "cdr-1mib",
+        "cdr-256b",
+        "latency-256b-udp",
+        "smoke-256b-udp",
+        "throughput-1mib-shm",
+        "throughput-boundary-above-udp",
+        "throughput-boundary-below-udp"
+      ],
+      "commit": "607d640d0538ea0c3ad19acefb2066d8f4ac7b78",
+      "commit_message": "Modernize GitHub Actions workflows (#10)\n\n* Modernize GitHub Actions workflows\n\n* fix: address PR #10 review feedback",
+      "commit_url": "https://github.com/uzuna/cyclonedds-rs/commit/607d640d0538ea0c3ad19acefb2066d8f4ac7b78",
+      "cyclonedds_sha": "1f7f75c0fa7fc9070dafaea43e14924d2537b59e",
+      "measured_at": "2026-08-12T14:08:33.107162Z",
+      "measured_at_unix": 1786543713,
+      "metrics": [
+        {
+          "case_id": "smoke-256b-udp",
+          "deserialize_elapsed_ns": null,
+          "latency_p50_ns": 205206,
+          "latency_p95_ns": 225239,
+          "latency_p99_ns": 225239,
+          "serialize_elapsed_ns": null,
+          "status": "ok",
+          "throughput_bytes_per_sec": 20483277.324371897,
+          "transport": "udp"
+        },
+        {
+          "case_id": "cdr-256b",
+          "deserialize_elapsed_ns": 3186324,
+          "latency_p50_ns": null,
+          "latency_p95_ns": null,
+          "latency_p99_ns": null,
+          "serialize_elapsed_ns": 2906156,
+          "status": "ok",
+          "throughput_bytes_per_sec": null,
+          "transport": "none"
+        },
+        {
+          "case_id": "cdr-16kib",
+          "deserialize_elapsed_ns": 16488707,
+          "latency_p50_ns": null,
+          "latency_p95_ns": null,
+          "latency_p99_ns": null,
+          "serialize_elapsed_ns": 14922031,
+          "status": "ok",
+          "throughput_bytes_per_sec": null,
+          "transport": "none"
+        },
+        {
+          "case_id": "cdr-1mib",
+          "deserialize_elapsed_ns": 123516486,
+          "latency_p50_ns": null,
+          "latency_p95_ns": null,
+          "latency_p99_ns": null,
+          "serialize_elapsed_ns": 110262957,
+          "status": "ok",
+          "throughput_bytes_per_sec": null,
+          "transport": "none"
+        },
+        {
+          "case_id": "latency-256b-udp",
+          "deserialize_elapsed_ns": null,
+          "latency_p50_ns": 112331,
+          "latency_p95_ns": 192093,
+          "latency_p99_ns": 581065,
+          "serialize_elapsed_ns": null,
+          "status": "ok",
+          "throughput_bytes_per_sec": 256252.02745653188,
+          "transport": "udp"
+        },
+        {
+          "case_id": "throughput-boundary-below-udp",
+          "deserialize_elapsed_ns": null,
+          "latency_p50_ns": 106301257,
+          "latency_p95_ns": 108850746,
+          "latency_p99_ns": 109198460,
+          "serialize_elapsed_ns": null,
+          "status": "ok",
+          "throughput_bytes_per_sec": 55290625.76170944,
+          "transport": "udp"
+        },
+        {
+          "case_id": "throughput-boundary-above-udp",
+          "deserialize_elapsed_ns": null,
+          "latency_p50_ns": 108610915,
+          "latency_p95_ns": 111251863,
+          "latency_p99_ns": 111420315,
+          "serialize_elapsed_ns": null,
+          "status": "ok",
+          "throughput_bytes_per_sec": 53808354.635759115,
+          "transport": "udp"
+        },
+        {
+          "case_id": "throughput-1mib-shm",
+          "deserialize_elapsed_ns": null,
+          "latency_p50_ns": 8693624,
+          "latency_p95_ns": 8763810,
+          "latency_p99_ns": 8788450,
+          "serialize_elapsed_ns": null,
+          "status": "ok",
+          "throughput_bytes_per_sec": 193864527.9501928,
+          "transport": "shm"
+        }
+      ],
+      "result_path": "results/607d640d0538ea0c3ad19acefb2066d8f4ac7b78/runs/github-31604349505-607d640d0538ea0c3ad19acefb2066d8f4ac7b78.json",
+      "run_id": "github-31604349505-607d640d0538ea0c3ad19acefb2066d8f4ac7b78",
+      "run_url": "https://github.com/uzuna/cyclonedds-rs/actions/runs/31604349505",
+      "statuses": [
+        "ok"
+      ],
+      "transports": [
+        "none",
+        "shm",
+        "udp"
+      ]
+    },
+    {
       "artifact_url": "https://github.com/uzuna/cyclonedds-rs/actions/runs/31498008747#artifacts",
       "cases": [
         "cdr-16kib",
@@ -400,5 +520,5 @@
     }
   ],
   "schema_version": 1,
-  "updated_at": "2026-08-11T13:56:41.558262Z"
+  "updated_at": "2026-08-12T14:08:33.110242Z"
 }
