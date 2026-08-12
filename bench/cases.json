@@ -14,7 +14,10 @@
       "kind": "latency",
       "transport": "udp",
       "shm": false,
-      "payload": { "kind": "fixed", "bytes": 256 },
+      "payload": {
+        "kind": "fixed",
+        "bytes": 256
+      },
       "rate_hz": 1000,
       "burst": 1,
       "warmup_messages": 100,
@@ -26,7 +29,11 @@
       "kind": "throughput",
       "transport": "udp",
       "shm": false,
-      "payload": { "kind": "wire_boundary", "relation": "below", "wire_bytes": 65535 },
+      "payload": {
+        "kind": "wire_boundary",
+        "relation": "below",
+        "wire_bytes": 65535
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 10,
@@ -38,7 +45,11 @@
       "kind": "throughput",
       "transport": "udp",
       "shm": false,
-      "payload": { "kind": "wire_boundary", "relation": "above", "wire_bytes": 65535 },
+      "payload": {
+        "kind": "wire_boundary",
+        "relation": "above",
+        "wire_bytes": 65535
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 10,
@@ -50,7 +61,10 @@
       "kind": "throughput",
       "transport": "shm",
       "shm": true,
-      "payload": { "kind": "fixed", "bytes": 1048576 },
+      "payload": {
+        "kind": "fixed",
+        "bytes": 1048576
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 10,
@@ -62,7 +76,10 @@
       "kind": "smoke",
       "transport": "udp",
       "shm": false,
-      "payload": { "kind": "fixed", "bytes": 256 },
+      "payload": {
+        "kind": "fixed",
+        "bytes": 256
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 0,
@@ -74,7 +91,10 @@
       "kind": "cdr",
       "transport": "none",
       "shm": false,
-      "payload": { "kind": "fixed", "bytes": 256 },
+      "payload": {
+        "kind": "fixed",
+        "bytes": 256
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 100,
@@ -86,7 +106,10 @@
       "kind": "cdr",
       "transport": "none",
       "shm": false,
-      "payload": { "kind": "fixed", "bytes": 16384 },
+      "payload": {
+        "kind": "fixed",
+        "bytes": 16384
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 100,
@@ -98,12 +121,62 @@
       "kind": "cdr",
       "transport": "none",
       "shm": false,
-      "payload": { "kind": "fixed", "bytes": 1048576 },
+      "payload": {
+        "kind": "fixed",
+        "bytes": 1048576
+      },
       "rate_hz": null,
       "burst": 1,
       "warmup_messages": 10,
       "measured_messages": 100,
       "timeout_seconds": 60
+    },
+    {
+      "id": "throughput-1mib-iox2",
+      "kind": "throughput",
+      "transport": "shm",
+      "shm": true,
+      "psmx": "iox2",
+      "payload": {
+        "kind": "fixed",
+        "bytes": 1048576
+      },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 100,
+      "timeout_seconds": 60
+    },
+    {
+      "id": "order-256b-shm",
+      "kind": "throughput",
+      "transport": "shm",
+      "shm": true,
+      "payload": {
+        "kind": "fixed",
+        "bytes": 256
+      },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 2000,
+      "timeout_seconds": 120
+    },
+    {
+      "id": "order-256b-iox2",
+      "kind": "throughput",
+      "transport": "shm",
+      "shm": true,
+      "psmx": "iox2",
+      "payload": {
+        "kind": "fixed",
+        "bytes": 256
+      },
+      "rate_hz": null,
+      "burst": 1,
+      "warmup_messages": 10,
+      "measured_messages": 2000,
+      "timeout_seconds": 120
     }
   ]
 }

@@ -4,6 +4,7 @@
 
 - `vendor/iceoryx` (v2.0.2)
 - `vendor/cyclonedds` (11.0.0)
+- `vendor/iceoryx2` (v0.8.1) — 評価用。既定のビルドには含めない
 
 ## 1. サブモジュールを初期化する
 
@@ -47,6 +48,23 @@ export CYCLONEDDS_HOME=${PWD}/vendor/cyclonedds/install
 export CYCLONEDDS_LIB_DIR=${CYCLONEDDS_HOME}/lib
 export CYCLONEDDS_INCLUDE_DIR=${CYCLONEDDS_HOME}/include
 ```
+
+## 4.5 iceoryx2版PSMXを評価する（任意）
+
+`psmx_iox2` は既定のビルドに含めません。cargo ビルドを挟むため、有効にすると
+CI の deb ビルドまで巻き込むためです。評価するときだけ次を実行してください。
+
+```bash
+make -C vendor build-iox2
+```
+
+`iceoryx2` をビルドしたうえで、`cyclonedds` を `ENABLE_ICEORYX2=ON` と
+`ENABLE_ICEORYX=YES` の両方有効で作り直し、`libpsmx_iox.so` と
+`libpsmx_iox2.so` を同居させます。どちらを使うかは XML の
+`PubSubMessageExchange` で選べます。
+
+現時点で `psmx_iox2` は受信経路が通りません。経緯は
+[docs/iceoryx2-spike.md](../docs/iceoryx2-spike.md) を参照してください。
 
 ## 5. クリーン
 

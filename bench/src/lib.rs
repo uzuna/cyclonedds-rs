@@ -51,12 +51,68 @@ pub struct BenchmarkCase {
     pub kind: CaseKind,
     pub transport: String,
     pub shm: bool,
+    /// 使用するPSMXプラグイン。未指定かつ`shm`が真ならiceoryx1として扱う
+    #[serde(default)]
+    pub psmx: Option<PsmxKind>,
     pub payload: PayloadDefinition,
     pub rate_hz: Option<u64>,
     pub burst: u64,
     pub warmup_messages: u64,
     pub measured_messages: u64,
     pub timeout_seconds: u64,
+}
+
+/// PSMX(共有メモリ経路)プラグインの種別。
+///
+/// Why 種別を持つ: iceoryx1は調停プロセス`iox-roudi`の起動を要するがiceoryx2は要らない。
+/// 実行手順そのものが変わるため、ケース定義から読み取れる形にする。
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PsmxKind {
+    Iox,
+    Iox2,
+}
+
+impl PsmxKind {
+    /// `PubSubMessageExchange`の`type`属性値。Cycloneはこの値から
+    /// エントリ関数`<type>_create_psmx`と`INSTANCE_NAME`を導出する
+    pub fn type_name(self) -> &'static str {
+        match self {
+            Self::Iox => "iox",
+            Self::Iox2 => "iox2",
+        }
+    }
+
+    /// プラグイン共有ライブラリ名
+    pub fn library(self) -> &'static str {
+        match self {
+            Self::Iox => "psmx_iox",
+            Self::Iox2 => "psmx_iox2",
+        }
+    }
+
+    /// プラグインへ渡す設定文字列。ログレベルのキー名が両者で異なる
+    pub fn config(self) -> &'static str {
+        match self {
+            Self::Iox => "LOG_LEVEL=INFO;",
+            Self::Iox2 => "LOGLEVEL=INFO;",
+        }
+    }
+
+    /// 送受信の前に調停プロセスの起動が要るか
+    pub fn needs_roudi(self) -> bool {
+        self == Self::Iox
+    }
+}
+
+impl BenchmarkCase {
+    /// 実際に使うPSMXプラグイン。`shm`が偽ならPSMXを使わない
+    pub fn psmx_kind(&self) -> Option<PsmxKind> {
+        if !self.shm {
+            return None;
+        }
+        Some(self.psmx.unwrap_or(PsmxKind::Iox))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -114,6 +170,9 @@ pub struct ResultRecord {
     pub kind: CaseKind,
     pub transport: String,
     pub shm: bool,
+    /// 実際に使われたPSMXプラグイン。非SHMケースでは`None`
+    #[serde(default)]
+    pub psmx: Option<PsmxKind>,
     pub domain_id: u32,
     pub interface: String,
     pub payload_bytes: usize,
@@ -639,14 +698,18 @@ fn file_hash_value(path: impl AsRef<Path>) -> Value {
     }
 }
 
-pub fn xml_config(shm: bool) -> String {
+pub fn xml_config(psmx_kind: Option<PsmxKind>) -> String {
     let max_message = "14720B";
     let fragment_size = "1344B";
-    let psmx = if shm {
-        r#"
-        <PubSubMessageExchange type="iox" library="psmx_iox" config="LOG_LEVEL=INFO;" />"#
-    } else {
-        ""
+    let psmx = match psmx_kind {
+        Some(kind) => format!(
+            r#"
+        <PubSubMessageExchange type="{}" library="{}" config="{}" />"#,
+            kind.type_name(),
+            kind.library(),
+            kind.config()
+        ),
+        None => String::new(),
     };
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" ?>

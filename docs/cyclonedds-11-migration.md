@@ -25,3 +25,4 @@
 
 - XCDR1のシリアライズ済み PSMX 経路で1 MiBのプロセス間送受信を確認した。
 - `Sample<T>` を共有メモリ上の生 `T` として借り出す設計は ABI 非互換のため採用しない。ゼロコピーの raw loan を提供するには、別途Rust側のアプリケーション型ABIを設計・検証する。
+- iceoryx2版のPSMX (`psmx_iox2`) は受信経路が通らず採用しない。詳細は [iceoryx2-spike.md](iceoryx2-spike.md)。
