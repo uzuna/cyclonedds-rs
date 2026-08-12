@@ -3,7 +3,7 @@ name = "__CRATE_NAME__"
 version = "__CRATE_VERSION__"
 edition = "2021"
 publish = false
-description = "Debian packaging metadata for CycloneDDS and iceoryx"
+description = "Cyclone DDS with iceoryx shared-memory transport"
 homepage = "__HOMEPAGE__"
 license = "Apache-2.0"
 
@@ -19,6 +19,10 @@ copyright = "__COPYRIGHT__"
 section = "libs"
 priority = "optional"
 depends = []
+extended-description = """
+Shared libraries and executables for Cyclone DDS, including the psmx_iox \
+PSMX plugin, together with the iceoryx RouDi daemon required for \
+shared-memory transport."""
 assets = [
     [
         "../iceoryx/install/bin/*",
@@ -40,6 +44,9 @@ assets = [
 [package.metadata.deb.variants.dev]
 name = "__PACKAGE_DEV_NAME__"
 depends = ["__PACKAGE_NAME__"]
+extended-description = """
+C headers, CMake package files and pkg-config files needed to build \
+applications against Cyclone DDS and iceoryx."""
 assets = [
     [
         "../iceoryx/install/include/**/*",
@@ -71,4 +78,6 @@ assets = [
 [package.metadata.deb.variants.config]
 name = "__PACKAGE_CONFIG_NAME__"
 depends = ["__PACKAGE_NAME__"]
+extended-description = """
+Default Cyclone DDS configuration XML installed under /etc/cyclonedds."""
 assets = [["../config/cyclonedds.xml", "etc/cyclonedds/", "644"]]
