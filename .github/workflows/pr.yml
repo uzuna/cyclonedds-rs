@@ -9,5 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-actions:
+    uses: ./.github/workflows/actions-lint.yml
+
   tests:
     uses: ./.github/workflows/test.yml
