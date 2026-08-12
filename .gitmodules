@@ -4,3 +4,6 @@
 [submodule "vendor/iceoryx"]
 	path = vendor/iceoryx
 	url = https://github.com/eclipse-iceoryx/iceoryx.git
+[submodule "vendor/iceoryx2"]
+	path = vendor/iceoryx2
+	url = https://github.com/eclipse-iceoryx/iceoryx2.git

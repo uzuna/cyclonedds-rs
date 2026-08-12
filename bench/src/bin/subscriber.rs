@@ -154,6 +154,7 @@ fn receive(
         kind: case_definition.kind.clone(),
         transport: case_definition.transport.clone(),
         shm: case_definition.shm,
+        psmx: case_definition.psmx_kind(),
         domain_id: DOMAIN_ID,
         interface: "lo".to_string(),
         payload_bytes: resolved_case.payload_bytes,

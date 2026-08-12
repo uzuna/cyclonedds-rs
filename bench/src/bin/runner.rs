@@ -63,6 +63,7 @@ fn failed_record(
         kind: case_definition.kind.clone(),
         transport: case_definition.transport.clone(),
         shm: case_definition.shm,
+        psmx: case_definition.psmx_kind(),
         domain_id: DOMAIN_ID,
         interface: "lo".to_string(),
         payload_bytes: resolved_case.payload_bytes,
@@ -160,6 +161,7 @@ fn run_cdr(
         kind: case_definition.kind.clone(),
         transport: case_definition.transport.clone(),
         shm: false,
+        psmx: None,
         domain_id: DOMAIN_ID,
         interface: "none".to_string(),
         payload_bytes: resolved_case.payload_bytes,
@@ -195,12 +197,14 @@ fn run_process_case(
         sanitize(run_id),
         sanitize(&case_definition.id)
     );
+    let psmx_kind = case_definition.psmx_kind();
     let config_path = write_temp_file(
         "cyclonedds-bench",
         ".xml",
-        &cyclonedds_bench::xml_config(case_definition.shm),
+        &cyclonedds_bench::xml_config(psmx_kind),
     )?;
-    let roudi = if case_definition.shm {
+    // iceoryx2は調停プロセスを持たず、参加プロセスだけで共有メモリを確立する
+    let roudi = if psmx_kind.is_some_and(|kind| kind.needs_roudi()) {
         match start_roudi() {
             Ok(roudi) => Some(roudi),
             Err(error) => {

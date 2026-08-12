@@ -17,7 +17,7 @@ BENCH_DIR := $(BENCH_OUT)/$(BENCH_RUN_ID)
 BENCH_METADATA := $(BENCH_DIR)/metadata.json
 BENCH_RESULTS := $(BENCH_DIR)/results.jsonl
 
-.PHONY: check-actions update-action-pins build-local-bench test-local-smoke test-local-cdr test-local-udp test-local-shm test-local-all
+.PHONY: check-actions update-action-pins build-local-bench test-local-smoke test-local-cdr test-local-udp test-local-shm test-local-iox2 test-local-all
 
 check-actions:
 	aqua exec -- actionlint
@@ -52,5 +52,14 @@ test-local-shm: build-local-bench
 	mkdir -p $(BENCH_DIR)
 	cp bench/cases.json $(BENCH_DIR)/cases.json
 	$(BENCH_RUNNER) --case throughput-1mib-shm --run-id $(BENCH_RUN_ID) --output $(BENCH_RESULTS) --metadata $(BENCH_METADATA)
+
+# iceoryx2版のPSMX。`make -C vendor build-iox2`でビルドしたlibpsmx_iox2.soが要る。
+# 順序検証ケースはiox側も流し、乱れがiceoryx2固有かを切り分けられるようにする
+test-local-iox2: build-local-bench
+	mkdir -p $(BENCH_DIR)
+	cp bench/cases.json $(BENCH_DIR)/cases.json
+	$(BENCH_RUNNER) --case throughput-1mib-iox2 --run-id $(BENCH_RUN_ID) --output $(BENCH_RESULTS) --metadata $(BENCH_METADATA)
+	$(BENCH_RUNNER) --case order-256b-shm --run-id $(BENCH_RUN_ID) --output $(BENCH_RESULTS) --metadata $(BENCH_METADATA)
+	$(BENCH_RUNNER) --case order-256b-iox2 --run-id $(BENCH_RUN_ID) --output $(BENCH_RESULTS) --metadata $(BENCH_METADATA)
 
 test-local-all: test-local-smoke test-local-cdr test-local-udp test-local-shm
