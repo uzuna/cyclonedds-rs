@@ -21,7 +21,7 @@ BENCH_RESULTS := $(BENCH_DIR)/results.jsonl
 
 check-actions:
 	aqua exec -- actionlint
-	aqua exec -- pinact run --fix=false --no-api
+	aqua exec -- pinact run --check
 
 update-action-pins:
 	aqua exec -- pinact run --update
